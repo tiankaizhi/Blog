@@ -30,9 +30,13 @@
 
 ![](assets/markdown-img-paste-20191217124949246.png)
 
-2.1、 如果你配置了 <code><font color="#f52814">delay</font></code>，则为延迟暴露
+2.1、
 
-![](assets/markdown-img-paste-20191217125542341.png)
+代码 ① 处判断是否暴露服务，根据<code><font color="#f52814"><dubbo:service export="true|false"></font></code> 设置
+
+代码 ② 处如果 <code><font color="#f52814">delay</font></code> 大于 0，表示延迟多少毫秒后暴露服务
+
+![](assets/markdown-img-paste-20191217180649526.png)
 
 延迟暴露采用的是 JDK 的 <code><font color="#f52814">ScheduledExecutorService</font></code> 进行调度的。
 
@@ -41,6 +45,259 @@
 延时调度机制触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#f52814">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#f52814">ServiceBean </font></code> 会执行 <code><font color="#f52814">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#f52814">ServiceConfig</font></code> 的 <code><font color="#f52814">export</font></code> 方法。
 
 ![](assets/markdown-img-paste-20191217130504955.png)
+
+第 412 行判断 <code><font color="#f52814">path</font></code> 为空后，将 <code><font color="#f52814">interfaceName</font></code> 赋给 <code><font color="#f52814">path</font></code>
+
+![](assets/markdown-img-paste-20191217144530385.png)
+
+<code><font color="#f52814">doExportUrls</font></code>  正式开始暴露服务
+
+```java
+    private void doExportUrls() {
+
+        // 获取当前服务对应的注册中心实例
+        List<URL> registryURLs = loadRegistries(true);   // @1 获取当前服务所有的注册中心地址
+
+        for (ProtocolConfig protocolConfig : protocols) { // @2 如果服务指暴露多个协议，则依次暴露
+
+            String pathKey = URL.buildKey(getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
+            ProviderModel providerModel = new ProviderModel(pathKey, ref, interfaceClass);
+            ApplicationModel.initProviderModel(pathKey, providerModel);
+
+            doExportUrlsFor1Protocol(protocolConfig, registryURLs); // @3
+        }
+    }
+```
+
+代码 @1：首先遍历 <code><font color="#f52814">ServiceBean</font></code> 的 <code><font color="#f52814">List< RegistryConfig> registries</font></code>（所有注册中心的配置信息），然后将地址封装成 <code><font color="#f52814">URL 对象</font></code> ，关于注册中心的所有配置属性，最终转换成 <code><font color="#f52814">url</font></code> 的属性(?属性名=属性值)。<code><font color="#f52814">loadRegistries(true)</font></code>，参数 true 代表服务提供者，false 代表服务消费者，如果是服务提供者，则检测注册中心的配置，如果配置了 <code><font color="#f52814">register="false"</font></code>，则忽略该地址，如果是服务消费者，并配置了 <code><font color="#f52814">subscribe="false"</font></code> 则表示不从该注册中心订阅服务，故也不返回。如果没有显示指定的服务注册中心，则默认会使用全局配置的注册中心。
+
+```java
+    /**
+     * 加载注册表并将其转换为{@link URL}，优先级顺序为：系统属性> dubbo注册表配置
+     * Load the registry and conversion it to {@link URL}, the priority order is: system property > dubbo registry config
+     *
+     * 是否是提供方
+     * @param provider whether it is the provider side
+     * @return
+     */
+    protected List<URL> loadRegistries(boolean provider) {
+        //必要时检查&&覆盖
+        // check && override if necessary
+        List<URL> registryList = new ArrayList<URL>();
+        if (CollectionUtils.isNotEmpty(registries)) {
+            for (RegistryConfig config : registries) {
+                String address = config.getAddress();
+                if (StringUtils.isEmpty(address)) {
+                    address = ANYHOST_VALUE;
+                }
+                if (!RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
+                    Map<String, String> map = new HashMap<String, String>();
+                    appendParameters(map, application);
+                    appendParameters(map, config);
+                    map.put(PATH_KEY, RegistryService.class.getName());
+                    appendRuntimeParameters(map);
+                    if (!map.containsKey(PROTOCOL_KEY)) {
+                        map.put(PROTOCOL_KEY, DUBBO_PROTOCOL);
+                    }
+                    List<URL> urls = UrlUtils.parseURLs(address, map);
+
+                    for (URL url : urls) {
+                        url = URLBuilder.from(url)
+                                .addParameter(REGISTRY_KEY, url.getProtocol())
+                                .setProtocol(REGISTRY_PROTOCOL)
+                                .build();
+                        if ((provider && url.getParameter(REGISTER_KEY, true))
+                                || (!provider && url.getParameter(SUBSCRIBE_KEY, true))) {
+                            registryList.add(url);
+                        }
+                    }
+                }
+            }
+        }
+        return registryList;
+    }
+```
+
+我们看一下加载完的 <code><font color="#f52814">registryList</font></code> 值：
+
+![](assets/markdown-img-paste-20191217190322787.png)
+
+代码 @2，加载完所有配置的注册中心 URL 之后，开始按照协议进行暴露。Dubbo 支持相同服务暴露多个协议。
+
+![](assets/markdown-img-paste-20191217203557972.png)
+
+我们看一下 <code><font color="#f52814">doExportUrlsFor1Protocol</font></code> 方法具体暴露逻辑
+
+```java
+private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
+        String name = protocolConfig.getName();
+        if (StringUtils.isEmpty(name)) {
+            name = DUBBO;
+        }
+
+        Map<String, String> map = new HashMap<String, String>();
+        map.put(SIDE_KEY, PROVIDER_SIDE);
+
+        appendRuntimeParameters(map);
+        appendParameters(map, metrics);
+        appendParameters(map, application);
+        appendParameters(map, module);
+        // remove 'default.' prefix for configs from ProviderConfig
+        // appendParameters(map, provider, Constants.DEFAULT_KEY);
+        appendParameters(map, provider);
+        appendParameters(map, protocolConfig);
+        appendParameters(map, this);
+        if (CollectionUtils.isNotEmpty(methods)) {
+            for (MethodConfig method : methods) {
+                appendParameters(map, method, method.getName());
+                String retryKey = method.getName() + ".retry";
+                if (map.containsKey(retryKey)) {
+                    String retryValue = map.remove(retryKey);
+                    if ("false".equals(retryValue)) {
+                        map.put(method.getName() + ".retries", "0");
+                    }
+                }
+                List<ArgumentConfig> arguments = method.getArguments();
+                if (CollectionUtils.isNotEmpty(arguments)) {
+                    for (ArgumentConfig argument : arguments) {
+                        // convert argument type
+                        if (argument.getType() != null && argument.getType().length() > 0) {
+                            Method[] methods = interfaceClass.getMethods();
+                            // visit all methods
+                            if (methods != null && methods.length > 0) {
+                                for (int i = 0; i < methods.length; i++) {
+                                    String methodName = methods[i].getName();
+                                    // target the method, and get its signature
+                                    if (methodName.equals(method.getName())) {
+                                        Class<?>[] argtypes = methods[i].getParameterTypes();
+                                        // one callback in the method
+                                        if (argument.getIndex() != -1) {
+                                            if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
+                                                appendParameters(map, argument, method.getName() + "." + argument.getIndex());
+                                            } else {
+                                                throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
+                                            }
+                                        } else {
+                                            // multiple callbacks in the method
+                                            for (int j = 0; j < argtypes.length; j++) {
+                                                Class<?> argclazz = argtypes[j];
+                                                if (argclazz.getName().equals(argument.getType())) {
+                                                    appendParameters(map, argument, method.getName() + "." + j);
+                                                    if (argument.getIndex() != -1 && argument.getIndex() != j) {
+                                                        throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        } else if (argument.getIndex() != -1) {
+                            appendParameters(map, argument, method.getName() + "." + argument.getIndex());
+                        } else {
+                            throw new IllegalArgumentException("Argument config must set index or type attribute.eg: <dubbo:argument index='0' .../> or <dubbo:argument type=xxx .../>");
+                        }
+
+                    }
+                }
+            } // end of methods for
+        }
+
+        if (ProtocolUtils.isGeneric(generic)) {
+            map.put(GENERIC_KEY, generic);
+            map.put(METHODS_KEY, ANY_VALUE);
+        } else {
+            String revision = Version.getVersion(interfaceClass, version);
+            if (revision != null && revision.length() > 0) {
+                map.put(REVISION_KEY, revision);
+            }
+
+            String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
+            if (methods.length == 0) {
+                logger.warn("No method found in service interface " + interfaceClass.getName());
+                map.put(METHODS_KEY, ANY_VALUE);
+            } else {
+                map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
+            }
+        }
+        if (!ConfigUtils.isEmpty(token)) {
+            if (ConfigUtils.isDefault(token)) {
+                map.put(TOKEN_KEY, UUID.randomUUID().toString());
+            } else {
+                map.put(TOKEN_KEY, token);
+            }
+        }
+        // export service
+        String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
+        Integer port = this.findConfigedPorts(protocolConfig, name, map);
+        URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
+
+        if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
+                .hasExtension(url.getProtocol())) {
+            url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
+                    .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
+        }
+
+        String scope = url.getParameter(SCOPE_KEY);
+        // don't export when none is configured
+        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
+
+            // export to local if the config is not remote (export to remote only when config is remote)
+            if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
+                exportLocal(url);
+            }
+            // export to remote if the config is not local (export to local only when config is local)
+            if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
+                if (!isOnlyInJvm() && logger.isInfoEnabled()) {
+                    logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
+                }
+                if (CollectionUtils.isNotEmpty(registryURLs)) {
+                    for (URL registryURL : registryURLs) {
+                        //if protocol is only injvm ,not register
+                        if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
+                            continue;
+                        }
+                        url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
+                        URL monitorUrl = loadMonitor(registryURL);
+                        if (monitorUrl != null) {
+                            url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
+                        }
+                        if (logger.isInfoEnabled()) {
+                            logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
+                        }
+
+                        // For providers, this is used to enable custom proxy to generate invoker
+                        String proxy = url.getParameter(PROXY_KEY);
+                        if (StringUtils.isNotEmpty(proxy)) {
+                            registryURL = registryURL.addParameter(PROXY_KEY, proxy);
+                        }
+
+                        Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+                        DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+                        Exporter<?> exporter = protocol.export(wrapperInvoker);
+                        exporters.add(exporter);
+                    }
+                } else {
+                    Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
+                    DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+                    Exporter<?> exporter = protocol.export(wrapperInvoker);
+                    exporters.add(exporter);
+                }
+                /**
+                 * @since 2.7.0
+                 * ServiceData Store
+                 */
+                MetadataReportService metadataReportService = null;
+                if ((metadataReportService = getMetadataReportService()) != null) {
+                    metadataReportService.publishProvider(url);
+                }
+            }
+        }
+        this.urls.add(url);
+    }
+```
 
 
 
