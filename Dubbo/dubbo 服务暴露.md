@@ -138,16 +138,21 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
         Map<String, String> map = new HashMap<String, String>();
         map.put(SIDE_KEY, PROVIDER_SIDE);
 
+        // @4
+        // 读取其他配置信息到 map，用于后续构造 URL
         appendRuntimeParameters(map);
         appendParameters(map, metrics);
         appendParameters(map, application);
         appendParameters(map, module);
+
+        // 这部分是删除了 2.6.x 版本的 default
         // remove 'default.' prefix for configs from ProviderConfig
         // appendParameters(map, provider, Constants.DEFAULT_KEY);
         appendParameters(map, provider);
         appendParameters(map, protocolConfig);
         appendParameters(map, this);
-        if (CollectionUtils.isNotEmpty(methods)) {
+
+        if (CollectionUtils.isNotEmpty(methods)) {  //@5
             for (MethodConfig method : methods) {
                 appendParameters(map, method, method.getName());
                 String retryKey = method.getName() + ".retry";
@@ -203,7 +208,7 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
             } // end of methods for
         }
 
-        if (ProtocolUtils.isGeneric(generic)) {
+        if (ProtocolUtils.isGeneric(generic)) {  //@6
             map.put(GENERIC_KEY, generic);
             map.put(METHODS_KEY, ANY_VALUE);
         } else {
@@ -212,7 +217,8 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
                 map.put(REVISION_KEY, revision);
             }
 
-            String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();
+            // 获取接口中的方法数组
+            String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();  //@7
             if (methods.length == 0) {
                 logger.warn("No method found in service interface " + interfaceClass.getName());
                 map.put(METHODS_KEY, ANY_VALUE);
@@ -299,6 +305,53 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
     }
 ```
 
+代码 @4 参数拼装后的结果
+
+![](assets/markdown-img-paste-20191217232414553.png)
+
+代码 @5 处判断 methods 为 null，直接跳到代码 @6 处
+
+![](assets/markdown-img-paste-20191217233723394.png)
+
+![](assets/markdown-img-paste-20191217234203310.png)
+
+![](assets/markdown-img-paste-2019121723482473.png)
+
+到这里本篇文章的第一个重点到了本地暴露
+
+![](assets/markdown-img-paste-20191217235119269.png)
+
+本地暴露细节
+
+![](assets/markdown-img-paste-20191217235549995.png)
+
+protocol
+
+```java
+/**
+  * 具有自适应功能的{@link协议}实现在不同情况下会有所不同。
+  * 具体的{@link协议}实现由{@link URL}中的协议属性确定。
+  * 例如：
+  * <li> 当 URL 为 Registry：//224.5.6.7：1234/org.apache.dubbo.registry.RegistryService？application = dubbo- sample 时，协议为 <b> RegistryProtocol </b> </li>
+  * <li> 如果网址为dubbo：//224.5.6.7：1234/org.apache.dubbo.config.api.DemoService？application = dubbo- sample，则协议为 <b> DubboProtocol </b> </li>
+  * <p>
+  * 实际上，当 {@link ExtensionLoader} 初始化 {@link Protocol} 瞬间时，它将自动包装两层，并最终获得 <b> ProtocolFilterWrapper </b> 或 <b> ProtocolListenerWrapper </b>
+  *
+  * The {@link Protocol} implementation with adaptive functionality,it will be different in different scenarios.
+  * A particular {@link Protocol} implementation is determined by the protocol attribute in the {@link URL}.
+  * For example:
+  *
+  * <li>when the url is registry://224.5.6.7:1234/org.apache.dubbo.registry.RegistryService?application=dubbo-sample,
+  * then the protocol is <b>RegistryProtocol</b></li>
+  *
+  * <li>when the url is dubbo://224.5.6.7:1234/org.apache.dubbo.config.api.DemoService?application=dubbo-sample, then
+  * the protocol is <b>DubboProtocol</b></li>
+  * <p>
+  * Actually，when the {@link ExtensionLoader} init the {@link Protocol} instants,it will automatically wraps two
+  * layers, and eventually will get a <b>ProtocolFilterWrapper</b> or <b>ProtocolListenerWrapper</b>
+  */
+  private static final Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension();
+```
 
 
 
