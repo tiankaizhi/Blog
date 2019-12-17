@@ -20,9 +20,28 @@
 
 ![](assets/markdown-img-paste-20191216231628258.png)
 
-在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#f52814">dubbo 2.7.3</font></code> 版本的 <code><font color="#f52814">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
+在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#f52814">2.7.3</font></code> 版本的 <code><font color="#f52814">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
 
 ## 暴露细节
+
+1、 创建 ServiceConfig 对象用来承载配置信息
+
+2、 暴露服务入口 <code><font color="#f52814">service.export()</font></code>
+
+![](assets/markdown-img-paste-20191217124949246.png)
+
+2.1、 如果你配置了 <code><font color="#f52814">delay</font></code>，则为延迟暴露
+
+![](assets/markdown-img-paste-20191217125542341.png)
+
+延迟暴露采用的是 JDK 的 <code><font color="#f52814">ScheduledExecutorService</font></code> 进行调度的。
+
+![](assets/markdown-img-paste-20191217130003135.png)
+
+延时调度机制触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#f52814">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#f52814">ServiceBean </font></code> 会执行 <code><font color="#f52814">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#f52814">ServiceConfig</font></code> 的 <code><font color="#f52814">export</font></code> 方法。
+
+![](assets/markdown-img-paste-20191217130504955.png)
+
 
 
 
