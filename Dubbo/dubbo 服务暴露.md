@@ -426,15 +426,146 @@ RPC 协议
 
 ![](assets/markdown-img-paste-20191218202349379.png)
 
+将 exporter 保存到 exporters 中
 
+![](assets/markdown-img-paste-20191219182128831.png)
 
+这条日志是很重要的
 
+![](assets/markdown-img-paste-20191219182358655.png)
 
+本地暴露到这里就结束了
 
+![](assets/markdown-img-paste-2019121918251208.png)
 
+![](assets/markdown-img-paste-20191219182709368.png)
 
+按照协议 URL 一次暴露
 
+![](assets/markdown-img-paste-20191219183214131.png)
 
+![](assets/markdown-img-paste-20191219185516548.png)
+
+```java
+  if (CollectionUtils.isNotEmpty(registryURLs)) {  // @1
+      for (URL registryURL : registryURLs) {
+          //if protocol is only injvm ,not register
+          if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {  // @2
+              continue;
+          }
+          url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY)); // @3
+          URL monitorUrl = loadMonitor(registryURL); //@4
+          if (monitorUrl != null) {
+              url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
+          }
+          if (logger.isInfoEnabled()) {
+              logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
+          }
+
+          // For providers, this is used to enable custom proxy to generate invoker
+          String proxy = url.getParameter(PROXY_KEY);
+          if (StringUtils.isNotEmpty(proxy)) {
+              registryURL = registryURL.addParameter(PROXY_KEY, proxy);
+          }
+
+          Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
+          DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+          Exporter<?> exporter = protocol.export(wrapperInvoker);
+          exporters.add(exporter);
+      }
+  } else {
+      Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
+      DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+      Exporter<?> exporter = protocol.export(wrapperInvoker);
+      exporters.add(exporter);
+  }
+```
+
+代码 @1：如果 scope 不为 remote，则先在本地暴露(injvm)，具体暴露服务的具体实现，将在 remote 模式中详细分析。
+
+代码 @2：如果 scope 不为 local，则将服务暴露在远程。
+
+代码 @3：remote 方式，检测当前配置的所有注册中心，如果注册中心不为空，则遍历注册中心，将服务依次在不同的注册中心进行注册。
+
+代码 @4：如果 dubbo:service 的 dynamic 属性未配置， 尝试取 dubbo:registry 的 dynamic 属性，该属性的作用是否启用动态注册，如果设置为 false，服务注册后，其状态显示为 disable，需要人工启用，当服务不可用时，也不会自动移除，同样需要人工处理，此属性不要在生产环境上配置。
+
+代码 @5：根据注册中心 url （注册中心 url），构建监控中心的 URL，如果监控中心 URL 不为空，则在服务提供者 URL 上追加 monitor，其值为监控中心 url (已编码)。
+
+![](assets/markdown-img-paste-2019121919172496.png)
+
+![](assets/markdown-img-paste-20191219191926813.png)
+
+```java
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+package org.apache.dubbo.rpc;
+
+import org.apache.dubbo.common.URL;
+import org.apache.dubbo.common.extension.Adaptive;
+import org.apache.dubbo.common.extension.SPI;
+
+import static org.apache.dubbo.rpc.Constants.PROXY_KEY;
+
+/**
+ * ProxyFactory. (API/SPI, Singleton, ThreadSafe)
+ */
+@SPI("javassist")
+public interface ProxyFactory {
+
+    /**
+     * create proxy.
+     *
+     * @param invoker
+     * @return proxy
+     */
+    @Adaptive({PROXY_KEY})
+    <T> T getProxy(Invoker<T> invoker) throws RpcException;
+
+    /**
+     * create proxy.
+     *
+     * @param invoker
+     * @return proxy
+     */
+    @Adaptive({PROXY_KEY})
+    <T> T getProxy(Invoker<T> invoker, boolean generic) throws RpcException;
+
+    /**
+     * create invoker.
+     *
+     * @param <T>
+     * @param proxy
+     * @param type
+     * @param url
+     * @return invoker
+     */
+    @Adaptive({PROXY_KEY})
+    <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) throws RpcException;
+
+}
+```
+
+![](assets/markdown-img-paste-2019121919274583.png)
+
+![](assets/markdown-img-paste-20191219192821130.png)
+
+![](assets/markdown-img-paste-20191219193145908.png)
 
 
 
