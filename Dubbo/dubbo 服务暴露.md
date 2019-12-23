@@ -30,7 +30,7 @@
 
 ![](assets/markdown-img-paste-20191217124949246.png)
 
-2.1、
+2.1
 
 代码 ① 处判断是否暴露服务，根据<code><font color="#f52814"><dubbo:service export="true|false"></font></code> 设置
 
