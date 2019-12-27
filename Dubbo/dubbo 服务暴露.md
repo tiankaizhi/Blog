@@ -22,21 +22,40 @@
 
 在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#de2c58">2.7.3</font></code> 版本的 <code><font color="#de2c58">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
 
-## 暴露细节
+## 暴露入口
 
-1、 创建 ServiceConfig 对象用来承载配置信息
+### ServiceConfig#export()
 
-2、 暴露服务入口 <code><font color="#de2c58">service.export()</font></code>
+```java
+public synchronized void export() {
+    if (provider != null) {
+        if (export == null) {
+            export = provider.getExport();
+        }
+        if (delay == null) {
+            delay = provider.getDelay();
+        }
+    }
+    if (export != null && !export) {  // @1
+        return;
+    }
 
-![](assets/markdown-img-paste-20191217124949246.png)
+    if (delay != null && delay > 0) {  // @2
+        delayExportExecutor.schedule(new Runnable() {
+            @Override
+            public void run() {
+                doExport();
+            }
+        }, delay, TimeUnit.MILLISECONDS);
+    } else {
+        doExport();
+    }
+}
+```
 
-2.1
-
-代码 ① 处判断是否暴露服务，根据<code><font color="#de2c58"><dubbo:service export="true|false"></font></code> 设置
+代码 @1 处判断是否暴露服务，根据 <code><font color="#de2c58"><dubbo:service export="true|false"></font></code> 设置
 
 代码 ② 处如果 <code><font color="#de2c58">delay</font></code> 大于 0，表示延迟多少毫秒后暴露服务
-
-![](assets/markdown-img-paste-20191217180649526.png)
 
 延迟暴露采用的是 JDK 的 <code><font color="#de2c58">ScheduledExecutorService</font></code> 进行调度的。
 
@@ -46,16 +65,17 @@
 
 ![](assets/markdown-img-paste-20191217130504955.png)
 
+### ServiceConfig#doExportUrls()
+
 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法会调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">doExport</font></code> 方法，到 319 行处。接下来调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">doExportUrls</font></code> 正式开始暴露服务。
 
 ![](assets/markdown-img-paste-20191225124821577.png)
 
-**ServiceConfig#doExportUrls()**
 ```java
 @SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
 
-      // @1 加载所有的注册中心
+      // @1 加载所有的注册中心 URL 地址
       List<URL> registryURLs = loadRegistries(true);
 
       // @2 遍历所有协议, 按照协议依次向每个注册中心暴露服务
@@ -65,7 +85,11 @@
   }
 ```
 
-代码 @1：首先遍历 <code><font color="#de2c58">ServiceBean</font></code> 的 <code><font color="#de2c58">List< RegistryConfig> registries</font></code>（所有注册中心的配置信息），然后将地址封装成 <code><font color="#de2c58">URL 对象</font></code> ，关于注册中心的所有配置属性，最终转换成 <code><font color="#de2c58">url</font></code> 的属性(?属性名=属性值)。<code><font color="#de2c58">loadRegistries(true)</font></code>，参数 true 代表服务提供者，false 代表服务消费者，如果是服务提供者，则检测注册中心的配置，如果配置了 <code><font color="#de2c58">register="false"</font></code>，则忽略该地址，如果是服务消费者，并配置了 <code><font color="#de2c58">subscribe="false"</font></code> 则表示不从该注册中心订阅服务，故也不返回。如果没有显示指定的服务注册中心，则默认会使用全局配置的注册中心。
+#### AbstractInterfaceConfig#loadRegistries(true)
+
+调用父类的 loadRegistries(true) 方法
+
+<code><font color="#de2c58">loadRegistries(true)</font></code>，参数 true 代表服务提供者，false 代表服务消费者，如果是服务提供者，则检测注册中心的配置，如果配置了 <code><font color="#de2c58">register="false"</font></code>，则忽略该地址，如果是服务消费者，并配置了 <code><font color="#de2c58">subscribe="false"</font></code> 则表示不从该注册中心订阅服务，故也不返回。如果没有显示指定的服务注册中心，则默认会使用全局配置的注册中心。
 
 ```java
     /**
@@ -77,32 +101,51 @@
      * @return
      */
     protected List<URL> loadRegistries(boolean provider) {
-        // check && override if necessary
+        // 校验 RegistryConfig 配置数组。
+        checkRegistry();
         List<URL> registryList = new ArrayList<URL>();
-        if (CollectionUtils.isNotEmpty(registries)) {
+        if (registries != null && !registries.isEmpty()) {
             for (RegistryConfig config : registries) {
+                // 获得注册中心的地址
                 String address = config.getAddress();
-                if (StringUtils.isEmpty(address)) {
-                    address = ANYHOST_VALUE;
+                if (address == null || address.length() == 0) {
+                    address = Constants.ANYHOST_VALUE;
                 }
-                if (!RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
+                String sysaddress = System.getProperty("dubbo.registry.address");  // 系统属性，优先级最高，可以覆盖
+                if (sysaddress != null && sysaddress.length() > 0) {
+                    address = sysaddress;
+                }
+                // 地址 address 是有效地址，包括 address != N/A ("N/A" 代表不配置注册中心)
+                if (address.length() > 0 && !RegistryConfig.NO_AVAILABLE.equalsIgnoreCase(address)) {
                     Map<String, String> map = new HashMap<String, String>();
+                    // 将各种配置对象，添加到 `map` 集合中。
                     appendParameters(map, application);
                     appendParameters(map, config);
-                    map.put(PATH_KEY, RegistryService.class.getName());
-                    appendRuntimeParameters(map);
-                    if (!map.containsKey(PROTOCOL_KEY)) {
-                        map.put(PROTOCOL_KEY, DUBBO_PROTOCOL);
+                    // 添加 `path` `dubbo` `timestamp` `pid` 到 `map` 集合中。
+                    map.put("path", RegistryService.class.getName());
+                    map.put("dubbo", Version.getProtocolVersion());
+                    map.put(Constants.TIMESTAMP_KEY, String.valueOf(System.currentTimeMillis()));
+                    if (ConfigUtils.getPid() > 0) {
+                        map.put(Constants.PID_KEY, String.valueOf(ConfigUtils.getPid()));
                     }
-                    List<URL> urls = UrlUtils.parseURLs(address, map);
-
+                    // 若不存在 `protocol` 参数，默认 "dubbo" 添加到 `map` 集合中。
+                    if (!map.containsKey("protocol")) {
+                        if (ExtensionLoader.getExtensionLoader(RegistryFactory.class).hasExtension("remote")) { // "remote" 可以忽略。因为，remote 这个拓展实现已经不存在。
+                            map.put("protocol", "remote");
+                        } else {
+                            map.put("protocol", "dubbo");
+                        }
+                    }
+                    // 解析地址，创建 Dubbo URL 数组。（数组大小可以为一）
+                    List<URL> urls = UrlUtils.parseURLs(address, map);  // @1
+                    // 循环 `url` ，设置 "registry" 和 "protocol" 属性。
                     for (URL url : urls) {
-                        url = URLBuilder.from(url)
-                                .addParameter(REGISTRY_KEY, url.getProtocol())
-                                .setProtocol(REGISTRY_PROTOCOL)
-                                .build();
-                        if ((provider && url.getParameter(REGISTER_KEY, true))
-                                || (!provider && url.getParameter(SUBSCRIBE_KEY, true))) {
+                        // 设置 `registry=${protocol}` 和 `protocol=registry` 到 URL
+                        url = url.addParameter(Constants.REGISTRY_KEY, url.getProtocol());
+                        // 添加到结果
+                        url = url.setProtocol(Constants.REGISTRY_PROTOCOL);
+                        if ((provider && url.getParameter(Constants.REGISTER_KEY, true)) // @2 服务提供者 && 注册
+                                || (!provider && url.getParameter(Constants.SUBSCRIBE_KEY, true))) { // @3 服务消费者 && 订阅
                             registryList.add(url);
                         }
                     }
@@ -113,219 +156,206 @@
     }
 ```
 
+代码 @1：<code><font color="#de2c58">address(true)</font></code> 可以使用 "|" 或者 ";" 作为分隔符，设置多个注册中心分组。注意，一个注册中心集群是一个分组，而不是多个。
+
+这个方法从名字上很难看出具体的含义，看下图的注释，相信胖友能理解
+
+![](assets/markdown-img-paste-2019122721593782.png)
+
+代码 @2 ：若是服务提供者，判断是否只订阅不注册。如果是，不添加结果到 registryList 中。对应 [《Dubbo 用户指南 —— 只订阅》](http://dubbo.apache.org/zh-cn/docs/user/demos/subscribe-only.html) 文档。
+第 54 行：若是服务消费者，判断是否只注册不订阅。如果是，不添加到结果 registryList 。对应 [《Dubbo 用户指南 —— 只注册》](http://dubbo.apache.org/zh-cn/docs/user/demos/registry-only.html) 文档。
+
+
 我们看一下加载完的 <code><font color="#f52814">registryList</font></code> 值：
 
-![](assets/markdown-img-paste-20191217190322787.png)
+![](assets/markdown-img-paste-20191227220744105.png)
 
-代码 @2，加载完所有配置的注册中心 URL 之后，开始按照协议进行暴露。Dubbo 支持相同服务暴露多个协议。
 
-![](assets/markdown-img-paste-20191217203557972.png)
+#### ServiceConfig#doExportUrlsFor1Protocol(protocolConfig, registryURLs)
 
-我们看一下 <code><font color="#f52814">doExportUrlsFor1Protocol</font></code> 方法具体暴露逻辑
+加载完所有配置的注册中心 URL 之后，开始按照协议进行暴露。Dubbo 支持相同服务暴露多个协议。
+
+我们看一下 <code><font color="#f52814">doExportUrlsFor1Protocol</font></code> 方法具体暴露逻辑，我们先看一下入参吧，分别是暴露协议和注册中心 URL
+
+![](assets/markdown-img-paste-20191227221550610.png)
 
 ```java
 private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> registryURLs) {
-        String name = protocolConfig.getName();
-        if (StringUtils.isEmpty(name)) {
-            name = DUBBO;
+    String scope = url.getParameter(Constants.SCOPE_KEY);
+    // don't export when none is configured
+    if (!Constants.SCOPE_NONE.toString().equalsIgnoreCase(scope)) {
+
+        // 本地暴露 (这里后面分析)
+        // export to local if the config is not remote (export to remote only when config is remote)
+        if (!Constants.SCOPE_REMOTE.toString().equalsIgnoreCase(scope)) {
+            exportLocal(url);
         }
-
-        Map<String, String> map = new HashMap<String, String>();
-        map.put(SIDE_KEY, PROVIDER_SIDE);
-
-        // @4
-        // 读取其他配置信息到 map，用于后续构造 URL
-        appendRuntimeParameters(map);
-        appendParameters(map, metrics);
-        appendParameters(map, application);
-        appendParameters(map, module);
-
-        // 这部分是删除了 2.6.x 版本的 default
-        // remove 'default.' prefix for configs from ProviderConfig
-        // appendParameters(map, provider, Constants.DEFAULT_KEY);
-        appendParameters(map, provider);
-        appendParameters(map, protocolConfig);
-        appendParameters(map, this);
-
-        if (CollectionUtils.isNotEmpty(methods)) {  //@5
-            for (MethodConfig method : methods) {
-                appendParameters(map, method, method.getName());
-                String retryKey = method.getName() + ".retry";
-                if (map.containsKey(retryKey)) {
-                    String retryValue = map.remove(retryKey);
-                    if ("false".equals(retryValue)) {
-                        map.put(method.getName() + ".retries", "0");
+        // export to remote if the config is not local (export to local only when config is local)
+        if (!Constants.SCOPE_LOCAL.toString().equalsIgnoreCase(scope)) {
+            if (logger.isInfoEnabled()) {
+                logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
+            }
+            if (registryURLs != null && !registryURLs.isEmpty()) {
+                for (URL registryURL : registryURLs) {
+                    // @1
+                    url = url.addParameterIfAbsent(Constants.DYNAMIC_KEY, registryURL.getParameter(Constants.DYNAMIC_KEY));
+                    // 获得监控中心 URL
+                    URL monitorUrl = loadMonitor(registryURL);
+                    if (monitorUrl != null) {
+                        url = url.addParameterAndEncoded(Constants.MONITOR_KEY, monitorUrl.toFullString()); // @2
                     }
-                }
-                List<ArgumentConfig> arguments = method.getArguments();
-                if (CollectionUtils.isNotEmpty(arguments)) {
-                    for (ArgumentConfig argument : arguments) {
-                        // convert argument type
-                        if (argument.getType() != null && argument.getType().length() > 0) {
-                            Method[] methods = interfaceClass.getMethods();
-                            // visit all methods
-                            if (methods != null && methods.length > 0) {
-                                for (int i = 0; i < methods.length; i++) {
-                                    String methodName = methods[i].getName();
-                                    // target the method, and get its signature
-                                    if (methodName.equals(method.getName())) {
-                                        Class<?>[] argtypes = methods[i].getParameterTypes();
-                                        // one callback in the method
-                                        if (argument.getIndex() != -1) {
-                                            if (argtypes[argument.getIndex()].getName().equals(argument.getType())) {
-                                                appendParameters(map, argument, method.getName() + "." + argument.getIndex());
-                                            } else {
-                                                throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
-                                            }
-                                        } else {
-                                            // multiple callbacks in the method
-                                            for (int j = 0; j < argtypes.length; j++) {
-                                                Class<?> argclazz = argtypes[j];
-                                                if (argclazz.getName().equals(argument.getType())) {
-                                                    appendParameters(map, argument, method.getName() + "." + j);
-                                                    if (argument.getIndex() != -1 && argument.getIndex() != j) {
-                                                        throw new IllegalArgumentException("Argument config error : the index attribute and type attribute not match :index :" + argument.getIndex() + ", type:" + argument.getType());
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        } else if (argument.getIndex() != -1) {
-                            appendParameters(map, argument, method.getName() + "." + argument.getIndex());
-                        } else {
-                            throw new IllegalArgumentException("Argument config must set index or type attribute.eg: <dubbo:argument index='0' .../> or <dubbo:argument type=xxx .../>");
-                        }
-
+                    if (logger.isInfoEnabled()) {
+                        logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
                     }
-                }
-            } // end of methods for
-        }
 
-        if (ProtocolUtils.isGeneric(generic)) {  //@6
-            map.put(GENERIC_KEY, generic);
-            map.put(METHODS_KEY, ANY_VALUE);
-        } else {
-            String revision = Version.getVersion(interfaceClass, version);
-            if (revision != null && revision.length() > 0) {
-                map.put(REVISION_KEY, revision);
-            }
-
-            // 获取接口中的方法数组
-            String[] methods = Wrapper.getWrapper(interfaceClass).getMethodNames();  //@7
-            if (methods.length == 0) {
-                logger.warn("No method found in service interface " + interfaceClass.getName());
-                map.put(METHODS_KEY, ANY_VALUE);
-            } else {
-                map.put(METHODS_KEY, StringUtils.join(new HashSet<String>(Arrays.asList(methods)), ","));
-            }
-        }
-        if (!ConfigUtils.isEmpty(token)) {
-            if (ConfigUtils.isDefault(token)) {
-                map.put(TOKEN_KEY, UUID.randomUUID().toString());
-            } else {
-                map.put(TOKEN_KEY, token);
-            }
-        }
-        // export service
-        String host = this.findConfigedHosts(protocolConfig, registryURLs, map);
-        Integer port = this.findConfigedPorts(protocolConfig, name, map);
-        URL url = new URL(name, host, port, getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), map);
-
-        if (ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
-                .hasExtension(url.getProtocol())) {
-            url = ExtensionLoader.getExtensionLoader(ConfiguratorFactory.class)
-                    .getExtension(url.getProtocol()).getConfigurator(url).configure(url);
-        }
-
-        String scope = url.getParameter(SCOPE_KEY);
-        // don't export when none is configured
-        if (!SCOPE_NONE.equalsIgnoreCase(scope)) {
-
-            // export to local if the config is not remote (export to remote only when config is remote)
-            if (!SCOPE_REMOTE.equalsIgnoreCase(scope)) {
-                exportLocal(url);
-            }
-            // export to remote if the config is not local (export to local only when config is local)
-            if (!SCOPE_LOCAL.equalsIgnoreCase(scope)) {
-                if (!isOnlyInJvm() && logger.isInfoEnabled()) {
-                    logger.info("Export dubbo service " + interfaceClass.getName() + " to url " + url);
-                }
-                if (CollectionUtils.isNotEmpty(registryURLs)) {
-                    for (URL registryURL : registryURLs) {
-                        //if protocol is only injvm ,not register
-                        if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {
-                            continue;
-                        }
-                        url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY));
-                        URL monitorUrl = loadMonitor(registryURL);
-                        if (monitorUrl != null) {
-                            url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
-                        }
-                        if (logger.isInfoEnabled()) {
-                            logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
-                        }
-
-                        // For providers, this is used to enable custom proxy to generate invoker
-                        String proxy = url.getParameter(PROXY_KEY);
-                        if (StringUtils.isNotEmpty(proxy)) {
-                            registryURL = registryURL.addParameter(PROXY_KEY, proxy);
-                        }
-
-                        Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
-                        DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-
-                        Exporter<?> exporter = protocol.export(wrapperInvoker);
-                        exporters.add(exporter);
+                    // For providers, this is used to enable custom proxy to generate invoker
+                    String proxy = url.getParameter(Constants.PROXY_KEY);
+                    if (StringUtils.isNotEmpty(proxy)) {
+                        registryURL = registryURL.addParameter(Constants.PROXY_KEY, proxy);
                     }
-                } else {
-                    Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
+
+                    // @3
+                    // 根据具体实现类, 实现接口, 以及 registryUrl, 通过 ProxyFactory 将 DemoServiceImpl 封装成一个具体的本地执行的 Invoker
+                    // invoker 是 DemoServiceImpl 的代理对象, 具体是怎样动态代理生成的？为什么传递的是注册中心的 URL 呢？后面会详细分析.
+                    Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(Constants.EXPORT_KEY, url.toFullString()));
+
+                    // @4
                     DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
 
+                    // 核心代码 @5
+                    // 使用 Protocol 将 invoker 封装成 Exporter
+                    // 调用 Protocol 生成的适配类的 export 方法
                     Exporter<?> exporter = protocol.export(wrapperInvoker);
                     exporters.add(exporter);
                 }
-                /**
-                 * @since 2.7.0
-                 * ServiceData Store
-                 */
-                MetadataReportService metadataReportService = null;
-                if ((metadataReportService = getMetadataReportService()) != null) {
-                    metadataReportService.publishProvider(url);
-                }
+            } else {
+                Invoker<?> invoker = proxyFactory.getInvoker(ref, (Class) interfaceClass, url);
+                DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
+
+                Exporter<?> exporter = protocol.export(wrapperInvoker);
+                exporters.add(exporter);
             }
         }
-        this.urls.add(url);
     }
+}
 ```
 
-代码 @4 参数拼装后的结果
+代码 @1：<code><font color="#de2c58">dynamic</font></code> 配置项，服务是否动态注册。如果设为 **false** ，注册后将显示后 **disable** 状态，需人工启用，并且服务提供者停止时，也不会自动取消册，需人工禁用。
 
-![](assets/markdown-img-paste-20191217232414553.png)
+代码 @2：调用 <code><font color="#de2c58">URL#addParameterAndEncoded(key, value)</font></code> 方法，将监控中心的 URL 作为 <code><font color="#de2c58">monitor</font></code> 参数添加到服务提供者的 URL 中，并且需要编码。通过这样的方式，服务提供者的 URL 中，**包含了监控中心的配置**。
 
-代码 @5 处判断 methods 为 null，直接跳到代码 @6 处
+代码 @3：调用 <code><font color="#de2c58">URL#addParameterAndEncoded(key, value)</font></code> 方法，将服务体用这的 URL 作为 <code><font color="#de2c58">export</font></code> 参数添加到注册中心的 URL 中。通过这样的方式，注册中心的 URL 中，**包含了服务提供者的配置**。
 
-![](assets/markdown-img-paste-20191217233723394.png)
+代码 @3：调用 <code><font color="#de2c58">ProxyFactory#getInvoker(proxy, type, url)</font></code> 方法，创建 Invoker 对象。该 Invoker 对象，执行 #invoke(invocation) 方法时，内部会调用 Service 对象( ref )对应的调用方法。
 
-![](assets/markdown-img-paste-20191217234203310.png)
+代码 @4：创建 <code><font color="#de2c58">com.alibaba.dubbo.config.invoker.DelegateProviderMetaDataInvoker</font></code> 对象。该对象在 Invoker 对象的基础上，增加了当前服务提供者 ServiceConfig 对象
 
-![](assets/markdown-img-paste-2019121723482473.png)
+#### Protocol#export(invoker) 暴露服务
 
-到这里本篇文章的第一个重点到了本地暴露
+此处 Dubbo SPI 自适应的特性的好处就出来了，可以自动根据 URL 参数，获得对应的拓展实现。例如，invoker 传入后，根据 invoker.url 自动获得对应 Protocol 拓展实现为 DubboProtocol 。
 
-为什么会有本地暴露和远程暴露呢？
+实际上，Protocol 有两个 Wrapper 拓展实现类： ProtocolFilterWrapper、ProtocolListenerWrapper 。所以，#export(...) 方法的调用顺序是：
 
-不从场景考虑讨论技术是没有意义的，在 dubbo 服务中我们一个服务可能既是 Provider，又是 Consumer，因此就存在他自己调用自己服务的情况，如果再通过网络去访问，那自然是舍近求远，因此他是有本地暴露服务的这个设计。从这里我们就知道这个两者的区别：
+```java
+Protocol$Adaptive => ProtocolFilterWrapper => ProtocolListenerWrapper => RegistryProtocol
+=>
+Protocol$Adaptive => ProtocolFilterWrapper => ProtocolListenerWrapper => DubboProtocol
+```
 
-1. 本地暴露是暴露在 JVM 中，不需要网络通信。
-2. 远程暴露是将 ip，端口等信息暴露给远程客户端，调用时需要网络通信。
+也就是说，**这一条大的调用链，包含两条小的调用链**。原因是：
 
-![](assets/markdown-img-paste-20191217235119269.png)
+首先，传入的是注册中心的 URL ，通过 ```Protocol$Adaptive``` 获取到的是 RegistryProtocol 对象。
+其次，RegistryProtocol 会在其 <code><font color="#de2c58">#export(...)</font></code> 方法中，使用服务提供者的 URL ( 即注册中心的 URL 的 <code><font color="#de2c58">export</font></code> 参数值)，再次调用 Protocol$Adaptive 获取到的是 DubboProtocol 对象，进行服务暴露。
 
-本地暴露细节
+为什么是这样的顺序？通过这样的顺序，可以实现类似 AOP 的效果，在本地服务器启动完成后，再向注册中心注册。伪代码如下：
 
-![](assets/markdown-img-paste-20191217235549995.png)
+```java
+RegistryProtocol#export(...) {
+
+    // 1. 启动本地服务器
+    DubboProtocol#export(...);
+
+    // 2. 向注册中心注册。
+}
+```
+
+这也是为什么上文提到的 “为什么传递的是注册中心的 URL 呢？” 的原因。
+
+## RegistryProtocol
+
+**com.alibaba.dubbo.registry.integration.RegistryProtocol** ，实现 **Protocol** 接口，注册中心协议实现类。
+
+看一下本文涉及到的 **Protocol**
+
+![](assets/markdown-img-paste-20191227232546665.png)
+
+> **友情提示，仅包含本文涉及的属性。**
+
+```java
+// ... 省略部分和本文无关的属性。
+
+/**
+ * 单例。在 Dubbo SPI 中，被初始化，有且仅有一次。
+ */
+private static RegistryProtocol INSTANCE;
+
+/**
+ * 绑定关系集合。
+ *
+ * key：服务 Dubbo URL
+ */
+// To solve the problem of RMI repeated exposure port conflicts, the services that have been exposed are no longer exposed.
+// 用于解决 rmi 重复暴露端口冲突的问题，已经暴露过的服务不再重新暴露
+// providerurl <--> exporter
+private final Map<String, ExporterChangeableWrapper<?>> bounds = new ConcurrentHashMap<String, ExporterChangeableWrapper<?>>();
+
+/**
+ * Protocol 自适应拓展实现类，通过 Dubbo SPI 自动注入。
+ */
+private Protocol protocol;
+
+/**
+ * RegistryFactory 自适应拓展实现类，通过 Dubbo SPI 自动注入。
+ */
+private RegistryFactory registryFactory;
+
+public RegistryProtocol() {
+    INSTANCE = this;
+}
+
+public static RegistryProtocol getRegistryProtocol() {
+    if (INSTANCE == null) {
+        ExtensionLoader.getExtensionLoader(Protocol.class).getExtension(Constants.REGISTRY_PROTOCOL); // load
+    }
+    return INSTANCE;
+}
+```
+
++ <code><font color="#de2c58">INSTANCE</font></code> 静态属性，单例。通过 Dubbo SPI 加载创建，有且仅有一次。
+  + <code><font color="#de2c58">#getRegistryProtocol()</font></code> 静态方法，获得单例。
++ <code><font color="#de2c58">bounds</font></code> 属性，绑定关系集合。其中，Key 为服务提供者 URL 。
++ <code><font color="#de2c58">protocol</font></code> 属性，Protocol 自适应拓展实现类，通过 Dubbo SPI 自动注入。
++ <code><font color="#de2c58">registryFactory</font></code> 属性，自适应拓展实现类，通过 Dubbo SPI 自动注入。
+  + 用于创建注册中心 Registry 对象。
+
+#export(invoker)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1
 
 SPI 机制生成 protocol，SPI 机制会单独写一篇文章来解释
 
