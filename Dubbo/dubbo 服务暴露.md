@@ -20,56 +20,52 @@
 
 ![](assets/markdown-img-paste-20191216231628258.png)
 
-在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#f52814">2.7.3</font></code> 版本的 <code><font color="#f52814">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
+在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#de2c58">2.7.3</font></code> 版本的 <code><font color="#de2c58">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
 
 ## 暴露细节
 
 1、 创建 ServiceConfig 对象用来承载配置信息
 
-2、 暴露服务入口 <code><font color="#f52814">service.export()</font></code>
+2、 暴露服务入口 <code><font color="#de2c58">service.export()</font></code>
 
 ![](assets/markdown-img-paste-20191217124949246.png)
 
 2.1
 
-代码 ① 处判断是否暴露服务，根据<code><font color="#f52814"><dubbo:service export="true|false"></font></code> 设置
+代码 ① 处判断是否暴露服务，根据<code><font color="#de2c58"><dubbo:service export="true|false"></font></code> 设置
 
-代码 ② 处如果 <code><font color="#f52814">delay</font></code> 大于 0，表示延迟多少毫秒后暴露服务
+代码 ② 处如果 <code><font color="#de2c58">delay</font></code> 大于 0，表示延迟多少毫秒后暴露服务
 
 ![](assets/markdown-img-paste-20191217180649526.png)
 
-延迟暴露采用的是 JDK 的 <code><font color="#f52814">ScheduledExecutorService</font></code> 进行调度的。
+延迟暴露采用的是 JDK 的 <code><font color="#de2c58">ScheduledExecutorService</font></code> 进行调度的。
 
 ![](assets/markdown-img-paste-20191217130003135.png)
 
-延时调度机制触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#f52814">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#f52814">ServiceBean </font></code> 会执行 <code><font color="#f52814">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#f52814">ServiceConfig</font></code> 的 <code><font color="#f52814">export</font></code> 方法。
+延时调度机制触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#de2c58">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#de2c58">ServiceBean </font></code> 会执行 <code><font color="#de2c58">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#f52814">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法。
 
 ![](assets/markdown-img-paste-20191217130504955.png)
 
-第 412 行判断 <code><font color="#f52814">path</font></code> 为空后，将 <code><font color="#f52814">interfaceName</font></code> 赋给 <code><font color="#f52814">path</font></code>
+<code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法会调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">doExport</font></code> 方法，到 319 行处。接下来调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">doExportUrls</font></code> 正式开始暴露服务。
 
-![](assets/markdown-img-paste-20191217144530385.png)
+![](assets/markdown-img-paste-20191225124821577.png)
 
-<code><font color="#f52814">doExportUrls</font></code>  正式开始暴露服务
-
+**ServiceConfig#doExportUrls()**
 ```java
+@SuppressWarnings({"unchecked", "rawtypes"})
     private void doExportUrls() {
 
-        // 获取当前服务对应的注册中心实例
-        List<URL> registryURLs = loadRegistries(true);   // @1 获取当前服务所有的注册中心地址
+      // @1 加载所有的注册中心
+      List<URL> registryURLs = loadRegistries(true);
 
-        for (ProtocolConfig protocolConfig : protocols) { // @2 如果服务指暴露多个协议，则依次暴露
-
-            String pathKey = URL.buildKey(getContextPath(protocolConfig).map(p -> p + "/" + path).orElse(path), group, version);
-            ProviderModel providerModel = new ProviderModel(pathKey, ref, interfaceClass);
-            ApplicationModel.initProviderModel(pathKey, providerModel);
-
-            doExportUrlsFor1Protocol(protocolConfig, registryURLs); // @3
-        }
-    }
+      // @2 遍历所有协议, 按照协议依次向每个注册中心暴露服务
+      for (ProtocolConfig protocolConfig : protocols) {
+          doExportUrlsFor1Protocol(protocolConfig, registryURLs);
+      }
+  }
 ```
 
-代码 @1：首先遍历 <code><font color="#f52814">ServiceBean</font></code> 的 <code><font color="#f52814">List< RegistryConfig> registries</font></code>（所有注册中心的配置信息），然后将地址封装成 <code><font color="#f52814">URL 对象</font></code> ，关于注册中心的所有配置属性，最终转换成 <code><font color="#f52814">url</font></code> 的属性(?属性名=属性值)。<code><font color="#f52814">loadRegistries(true)</font></code>，参数 true 代表服务提供者，false 代表服务消费者，如果是服务提供者，则检测注册中心的配置，如果配置了 <code><font color="#f52814">register="false"</font></code>，则忽略该地址，如果是服务消费者，并配置了 <code><font color="#f52814">subscribe="false"</font></code> 则表示不从该注册中心订阅服务，故也不返回。如果没有显示指定的服务注册中心，则默认会使用全局配置的注册中心。
+代码 @1：首先遍历 <code><font color="#de2c58">ServiceBean</font></code> 的 <code><font color="#de2c58">List< RegistryConfig> registries</font></code>（所有注册中心的配置信息），然后将地址封装成 <code><font color="#de2c58">URL 对象</font></code> ，关于注册中心的所有配置属性，最终转换成 <code><font color="#de2c58">url</font></code> 的属性(?属性名=属性值)。<code><font color="#de2c58">loadRegistries(true)</font></code>，参数 true 代表服务提供者，false 代表服务消费者，如果是服务提供者，则检测注册中心的配置，如果配置了 <code><font color="#de2c58">register="false"</font></code>，则忽略该地址，如果是服务消费者，并配置了 <code><font color="#de2c58">subscribe="false"</font></code> 则表示不从该注册中心订阅服务，故也不返回。如果没有显示指定的服务注册中心，则默认会使用全局配置的注册中心。
 
 ```java
     /**
@@ -81,7 +77,6 @@
      * @return
      */
     protected List<URL> loadRegistries(boolean provider) {
-        //必要时检查&&覆盖
         // check && override if necessary
         List<URL> registryList = new ArrayList<URL>();
         if (CollectionUtils.isNotEmpty(registries)) {
