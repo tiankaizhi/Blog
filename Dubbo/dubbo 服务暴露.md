@@ -338,13 +338,122 @@ public static RegistryProtocol getRegistryProtocol() {
 + <code><font color="#de2c58">registryFactory</font></code> 属性，自适应拓展实现类，通过 Dubbo SPI 自动注入。
   + 用于创建注册中心 Registry 对象。
 
-#export(invoker)
 
+### RegistryProtocol#export(invoker)
 
+```java
+public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
+    // export invoker
+    // 暴露服务
+    final ExporterChangeableWrapper<T> exporter = doLocalExport(originInvoker); // @1
 
+    // 获得注册中心 URL
+    URL registryUrl = getRegistryUrl(originInvoker);
 
+    // registry provider
+    // 根据 invoker 中的 url 获得注册中心对象 Registry 实例
+    final Registry registry = getRegistry(originInvoker);
 
+    // 获取注册到注册中心的 URL
+    final URL registeredProviderUrl = getRegisteredProviderUrl(originInvoker);
 
+    // to judge to delay publish whether or not
+    boolean register = registeredProviderUrl.getParameter("register", true);
+
+    // 向本地注册表，注册服务提供者
+    ProviderConsumerRegTable.registerProvider(originInvoker, registryUrl, registeredProviderUrl);
+
+    // 向注册中心注册服务提供者（自己）
+    if (register) {
+        // 若有消费者订阅此服务, 则推送消息让消费者引用此服务
+        // 注册中心缓存了所有提供者注册的服务以供消费者发现
+        register(registryUrl, registeredProviderUrl);
+        ProviderConsumerRegTable.getProviderWrapper(originInvoker).setReg(true);
+    }
+
+    // Subscribe the override data
+    // FIXME When the provider subscribes, it will affect the scene : a certain JVM exposes the service and call the same service. Because the subscribed is cached key with the name of the service, it causes the subscription information to cover.
+    final URL overrideSubscribeUrl = getSubscribedOverrideUrl(registeredProviderUrl);
+    final OverrideListener overrideSubscribeListener = new OverrideListener(overrideSubscribeUrl, originInvoker);
+    overrideListeners.put(overrideSubscribeUrl, overrideSubscribeListener);
+    registry.subscribe(overrideSubscribeUrl, overrideSubscribeListener);
+    //Ensure that a new exporter instance is returned every time export
+    return new DestroyableExporter<T>(exporter, originInvoker, overrideSubscribeUrl, registeredProviderUrl);
+}
+```
+
+代码 @1 调用 <code><font color="#de2c58">#doLocalExport(invoker)</font></code> 方法，暴露服务
+
+#### RegistryProtocol#doLocalExport()
+
+```java
+/**
+  * 暴露服务。
+  *
+  * 此处的 Local 指的是，本地启动服务，但是不包括向注册中心注册服务的意思。
+  *
+  * @param originInvoker 原始 Invoker
+  * @param <T> 泛型
+  * @return Exporter 对象
+  */
+@SuppressWarnings("unchecked")
+private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originInvoker) {
+    // 获得在 `bounds` 中的缓存 Key
+    String key = getCacheKey(originInvoker);  // @1
+    // 从 `bounds` 获得，是不是已经暴露过服务
+    ExporterChangeableWrapper<T> exporter = (ExporterChangeableWrapper<T>) bounds.get(key);  // @2
+    if (exporter == null) {
+        synchronized (bounds) {
+            exporter = (ExporterChangeableWrapper<T>) bounds.get(key);
+            // 未暴露过，进行暴露服务
+            if (exporter == null) {
+                // @3
+                // 创建 Invoker Delegate 对象
+                final Invoker<?> invokerDelegete = new InvokerDelegete<T>(originInvoker, getProviderUrl(originInvoker));
+
+                // @4
+                // 暴露服务，创建 Exporter 对象
+                // 使用 创建的 Exporter对象 + originInvoker ，创建 ExporterChangeableWrapper 对象
+                exporter = new ExporterChangeableWrapper<T>((Exporter<T>) protocol.export(invokerDelegete),  originInvoker);
+                // 添加到 `bounds`
+                bounds.put(key, exporter);
+            }
+        }
+    }
+    return exporter;
+}
+
+```
+
+代码 @2：根据 @1 中的 key 拿到 ExporterChangeableWrapper, 如果为空则未暴露过。
+
+代码 @3：创建 **com.alibaba.dubbo.registry.integration.RegistryProtocol.InvokerDelegete** 对象。
+**InvokerDelegete** 实现 **com.alibaba.dubbo.rpc.protocol.InvokerWrapper** 类，主要增加了 **#getInvoker()** 方法，获得真实的，非 InvokerDelegete 的 Invoker 对象。因为，可能会存在 InvokerDelegete.invoker 也是 InvokerDelegete 类型的情况。
+
+代码 @4：调用 <code><font color="#de2c58">DubboProtocol#export(invoker)</font></code> 方法，暴露服务，返回 Exporter 对象。
+使用【创建的 Exporter 对象】+【originInvoker】，创建 ExporterChangeableWrapper 对象。这样，originInvoker 就和 Exporter 对象，形成了绑定的关系。
+
+### DubboProtocol
+
+**com.alibaba.dubbo.rpc.protocol.dubbo.DubboProtocol**，实现 **AbstractProtocol** 抽象类，Dubbo 协议实现类。
+
+**属性相关，代码如下：**
+
+> **友情提示，仅包含本文涉及的属性。**
+
+```java
+// ... 省略部分和本文无关的属性。
+
+/**
+ * 通信服务器集合
+ *
+ * key: 服务器地址。格式为：host:port
+ */
+private final Map<String, ExchangeServer> serverMap = new ConcurrentHashMap<String, ExchangeServer>(); // <host:port,Exchanger>
+
+```
+
+serverMap 属性，通信服务器集合。其中，Key 为服务器地址，格式为 host:port。
 
 
 
