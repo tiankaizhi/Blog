@@ -650,9 +650,59 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
     } else {
         handler = new ChannelHandlerDispatcher(handlers);
     }
-    return getTransporter().bind(url, handler);
+    return getTransporter().bind(url, handler); // @1
 }
 ```
+
+**Transporters#getTransporter()**
+
+```java
+public static Transporter getTransporter() {
+    return ExtensionLoader.getExtensionLoader(Transporter.class).getAdaptiveExtension();
+}
+```
+
+看一下 Transporters 的实现
+
+![](assets/markdown-img-paste-20200102232818901.png)
+
+根据 SPI 实现具体是 netty4 下的 NettyTransporter
+
+**Transporters#getTransporter()**
+
+```java
+public class NettyTransporter implements Transporter {
+
+    public static final String NAME = "netty";
+
+    @Override
+    public Server bind(URL url, ChannelHandler listener) throws RemotingException { //@1
+        return new NettyServer(url, listener);
+    }
+
+    @Override
+    public Client connect(URL url, ChannelHandler listener) throws RemotingException {
+        return new NettyClient(url, listener);
+    }
+
+}
+```
+
+注意：这里有一个语义级别的转换，ChannelHandler 转变为 listener 语义，说明 ChannelHandler 的具体实现应该实现了 listener 的语义功能。
+
+![](assets/markdown-img-paste-20200102232050763.png)
+
+![](assets/markdown-img-paste-2020010223352852.png)
+
+**NettyServer**
+
+```java
+public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
+    super(url, ChannelHandlers.wrap(handler, ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME))); // @1
+}
+```
+
+@1 中的 <code><font color="#de2c58">ChannelHandlers.wrap(handler, ExecutorUtil.setThreadName(url, SERVER_THREAD_POOL_NAME))</font></code> 这一步涉及到从 netty 服务器接收数据包、业务线程池的派发机制等等很多重要的模块会在后面分析。
 
 
 
