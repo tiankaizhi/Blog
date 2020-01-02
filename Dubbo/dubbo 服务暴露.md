@@ -605,14 +605,13 @@ public interface Exchanger {
      */
     @Adaptive({Constants.EXCHANGER_KEY})
     ExchangeClient connect(URL url, ExchangeHandler handler) throws RemotingException;
-
 }
 ```
 
 + ExchangeServer bind(URL url, ExchangeHandler handler)：服务提供者调用。
 + ExchangeClient connect(URL url, ExchangeHandler handler)：服务消费者调用。
 
-dubbo 提供的实现类为：HeaderExchanger
+Exchanger 具体的实现类为：HeaderExchanger
 
 **HeaderExchanger.bind(URL url, ExchangeHandler handler) throws RemotingException**
 
@@ -655,250 +654,20 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
 }
 ```
 
-1
 
-SPI 机制生成 protocol，SPI 机制会单独写一篇文章来解释
 
-```java
-/**
-  * 具有自适应功能的 {@link协议} 实现在不同情况下会有所不同。
-  * 具体的{@link协议}实现由{@link URL}中的协议属性确定。
-  * 例如：
-  * <li> 当 URL 为 Registry：//224.5.6.7：1234/org.apache.dubbo.registry.RegistryService？application = dubbo- sample 时，协议为 <b> RegistryProtocol </b> </li>
-  * <li> 如果网址为dubbo：//224.5.6.7：1234/org.apache.dubbo.config.api.DemoService？application = dubbo- sample，则协议为 <b> DubboProtocol </b> </li>
-  * <p>
-  * 实际上，当 {@link ExtensionLoader} 初始化 {@link Protocol} 瞬间时，它将自动包装两层，并最终获得 <b> ProtocolFilterWrapper </b> 或 <b> ProtocolListenerWrapper </b>
-  *
-  * The {@link Protocol} implementation with adaptive functionality,it will be different in different scenarios.
-  * A particular {@link Protocol} implementation is determined by the protocol attribute in the {@link URL}.
-  * For example:
-  *
-  * <li>when the url is registry://224.5.6.7:1234/org.apache.dubbo.registry.RegistryService?application=dubbo-sample,
-  * then the protocol is <b>RegistryProtocol</b></li>
-  *
-  * <li>when the url is dubbo://224.5.6.7:1234/org.apache.dubbo.config.api.DemoService?application=dubbo-sample, then
-  * the protocol is <b>DubboProtocol</b></li>
-  * <p>
-  * Actually，when the {@link ExtensionLoader} init the {@link Protocol} instants,it will automatically wraps two
-  * layers, and eventually will get a <b>ProtocolFilterWrapper</b> or <b>ProtocolListenerWrapper</b>
-  */
-  private static final Protocol protocol = ExtensionLoader.getExtensionLoader(Protocol.class).getAdaptiveExtension();
-```
-SPI 机制生成 PROXY_FACTORY
 
-```java
-/**
-  *{@link ProxyFactory} 实现将生成导出的服务代理，JavassistProxyFactor是其实现
-  *
-  * A {@link ProxyFactory} implementation that will generate a exported service proxy,the JavassistProxyFactor is its
-  * default implementation
-  */
-  private static final ProxyFactory PROXY_FACTORY = ExtensionLoader.getExtensionLoader(ProxyFactory.class).getAdaptiveExtension();
-```
 
-![](assets/markdown-img-paste-20191218122516171.png)
 
-<code><font color="#f52814">ProtocolFilterWrapper</font></code> 是在生成 Invoker 的过滤器链
 
-到这里有一个问题请大家思考一下：
 
-即将要暴露的 <code><font color="#f52814"> Invoker </font></code> 是 injvm 协议的，而 protocol 也是 jvm 协议，这是怎么做到的。
 
-![](assets/markdown-img-paste-20191218123141200.png)
 
-RPC 协议
 
-![](assets/markdown-img-paste-20191218124720471.png)
 
-<code><font color="#d80532">buildInvokerChain</font></code> 之后，形成了一个过滤器链，从中可以看出 dubbo 默认的过滤器是 8 个。
 
-![](assets/markdown-img-paste-20191218125344816.png)
 
-![](assets/markdown-img-paste-20191218125653753.png)
 
-到达 <code><font color="#d80532">InjvmProtocol</font></code>
-
-![](assets/markdown-img-paste-20191218194845149.png)
-
-![](assets/markdown-img-paste-20191218195330835.png)
-
-![](assets/markdown-img-paste-20191218195645442.png)
-
-![](assets/markdown-img-paste-20191218200523778.png)
-
-![](assets/markdown-img-paste-20191218200727219.png)
-
-![](assets/markdown-img-paste-20191218201529941.png)
-
-```java
-@Override
-    public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
-        // Registry类型的 Invoker
-        if (REGISTRY_PROTOCOL.equals(invoker.getUrl().getProtocol())) {
-            return protocol.export(invoker);
-        }
-
-        //其他具体协议类型的 Invoker
-        //先进行导出 protocol.export(invoker)
-        //然后获取自适应的监听器
-        //最后返回的是包装了监听器的 Exporter
-        //这里监听器的获取是 getActivateExtension，如果指定了 listener 就加载实现，没有指定就不加载
-        return new ListenerExporterWrapper<T>(protocol.export(invoker),  // @11
-                Collections.unmodifiableList(ExtensionLoader.getExtensionLoader(ExporterListener.class)
-                        .getActivateExtension(invoker.getUrl(), EXPORTER_LISTENER_KEY)));
-    }
-```
-
-![](assets/markdown-img-paste-20191218202349379.png)
-
-将 exporter 保存到 exporters 中
-
-![](assets/markdown-img-paste-20191219182128831.png)
-
-这条日志是很重要的
-
-![](assets/markdown-img-paste-20191219182358655.png)
-
-本地暴露到这里就结束了
-
-![](assets/markdown-img-paste-2019121918251208.png)
-
-![](assets/markdown-img-paste-20191219182709368.png)
-
-按照协议 URL 一次暴露
-
-![](assets/markdown-img-paste-20191219183214131.png)
-
-![](assets/markdown-img-paste-20191219185516548.png)
-
-```java
-  if (CollectionUtils.isNotEmpty(registryURLs)) {  // @1
-      for (URL registryURL : registryURLs) {
-          //if protocol is only injvm ,not register
-          if (LOCAL_PROTOCOL.equalsIgnoreCase(url.getProtocol())) {  // @2
-              continue;
-          }
-          url = url.addParameterIfAbsent(DYNAMIC_KEY, registryURL.getParameter(DYNAMIC_KEY)); // @3
-          URL monitorUrl = loadMonitor(registryURL); //@4
-          if (monitorUrl != null) {
-              url = url.addParameterAndEncoded(MONITOR_KEY, monitorUrl.toFullString());
-          }
-          if (logger.isInfoEnabled()) {
-              logger.info("Register dubbo service " + interfaceClass.getName() + " url " + url + " to registry " + registryURL);
-          }
-
-          // For providers, this is used to enable custom proxy to generate invoker
-          String proxy = url.getParameter(PROXY_KEY);
-          if (StringUtils.isNotEmpty(proxy)) {
-              registryURL = registryURL.addParameter(PROXY_KEY, proxy);
-          }
-
-          Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, registryURL.addParameterAndEncoded(EXPORT_KEY, url.toFullString()));
-          DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-
-          Exporter<?> exporter = protocol.export(wrapperInvoker);
-          exporters.add(exporter);
-      }
-  } else {
-      Invoker<?> invoker = PROXY_FACTORY.getInvoker(ref, (Class) interfaceClass, url);
-      DelegateProviderMetaDataInvoker wrapperInvoker = new DelegateProviderMetaDataInvoker(invoker, this);
-
-      Exporter<?> exporter = protocol.export(wrapperInvoker);
-      exporters.add(exporter);
-  }
-```
-
-代码 @1：如果 scope 不为 remote，则先在本地暴露(injvm)，具体暴露服务的具体实现，将在 remote 模式中详细分析。
-
-代码 @2：如果 scope 不为 local，则将服务暴露在远程。
-
-代码 @3：remote 方式，检测当前配置的所有注册中心，如果注册中心不为空，则遍历注册中心，将服务依次在不同的注册中心进行注册。
-
-代码 @4：如果 dubbo:service 的 dynamic 属性未配置， 尝试取 dubbo:registry 的 dynamic 属性，该属性的作用是否启用动态注册，如果设置为 false，服务注册后，其状态显示为 disable，需要人工启用，当服务不可用时，也不会自动移除，同样需要人工处理，此属性不要在生产环境上配置。
-
-代码 @5：根据注册中心 url （注册中心 url），构建监控中心的 URL，如果监控中心 URL 不为空，则在服务提供者 URL 上追加 monitor，其值为监控中心 url (已编码)。
-
-![](assets/markdown-img-paste-2019121919172496.png)
-
-![](assets/markdown-img-paste-20191219191926813.png)
-
-```java
-/*
- * Licensed to the Apache Software Foundation (ASF) under one or more
- * contributor license agreements.  See the NOTICE file distributed with
- * this work for additional information regarding copyright ownership.
- * The ASF licenses this file to You under the Apache License, Version 2.0
- * (the "License"); you may not use this file except in compliance with
- * the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-package org.apache.dubbo.rpc;
-
-import org.apache.dubbo.common.URL;
-import org.apache.dubbo.common.extension.Adaptive;
-import org.apache.dubbo.common.extension.SPI;
-
-import static org.apache.dubbo.rpc.Constants.PROXY_KEY;
-
-/**
- * ProxyFactory. (API/SPI, Singleton, ThreadSafe)
- */
-@SPI("javassist")
-public interface ProxyFactory {
-
-    /**
-     * create proxy.
-     *
-     * @param invoker
-     * @return proxy
-     */
-    @Adaptive({PROXY_KEY})
-    <T> T getProxy(Invoker<T> invoker) throws RpcException;
-
-    /**
-     * create proxy.
-     *
-     * @param invoker
-     * @return proxy
-     */
-    @Adaptive({PROXY_KEY})
-    <T> T getProxy(Invoker<T> invoker, boolean generic) throws RpcException;
-
-    /**
-     * create invoker.
-     *
-     * @param <T>
-     * @param proxy
-     * @param type
-     * @param url
-     * @return invoker
-     */
-    @Adaptive({PROXY_KEY})
-    <T> Invoker<T> getInvoker(T proxy, Class<T> type, URL url) throws RpcException;
-
-}
-```
-
-![](assets/markdown-img-paste-2019121919274583.png)
-
-![](assets/markdown-img-paste-20191219192821130.png)
-
-![](assets/markdown-img-paste-20191219193145908.png)
-
-![](assets/markdown-img-paste-20191224204507198.png)
-
-![](assets/markdown-img-paste-20191224204447172.png)
-
-![](assets/markdown-img-paste-20191224204630460.png)
-
-![](assets/markdown-img-paste-20191224205116327.png)
 
 
 
