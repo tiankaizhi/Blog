@@ -1,6 +1,6 @@
 ## 引言
 
-研究源码是一个充满疑惑并且非常枯燥的过程，因为在研究的过程中可能很多你都看不懂，所以我们最好先带着问题去看源码，这样即使研究完后还是存在很多疑问，但是我们至少抓住了重点。
+研究源码是一个充满疑惑并且非常枯燥的过程，因为在研究的过程中可能存在诸多疑点，所以我们最好先带着问题去看源码，这样即使在研究完后还是存在很多疑问，但是我们至少抓住了重点。
 
 ## 带着这些问题
 
@@ -20,7 +20,7 @@
 
 ![](assets/markdown-img-paste-20191216231628258.png)
 
-在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#de2c58">2.7.3</font></code> 版本的 <code><font color="#de2c58">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
+在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#de2c58">2.6.7</font></code> 版本的 <code><font color="#de2c58">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubboSourceCodeAnalysis) 仓库去下载。
 
 ## 暴露入口
 
@@ -59,11 +59,24 @@ public synchronized void export() {
 
 延迟暴露采用的是 JDK 的 <code><font color="#de2c58">ScheduledExecutorService</font></code> 进行调度的。
 
-![](assets/markdown-img-paste-20191217130003135.png)
+```java
+private static final ScheduledExecutorService delayExportExecutor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("DubboServiceDelayExporter", true));
+```
 
 延时调度机制触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#de2c58">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#de2c58">ServiceBean </font></code> 会执行 <code><font color="#de2c58">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#f52814">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法。
 
-![](assets/markdown-img-paste-20191217130504955.png)
+### ServiceBean#
+```java
+@Override
+public void onApplicationEvent(ContextRefreshedEvent event) {
+    if (isDelay() && !isExported() && !isUnexported()) {
+        if (logger.isInfoEnabled()) {
+            logger.info("The service ready on spring started. service: " + getInterface());
+        }
+        export();
+    }
+}
+```
 
 ### ServiceConfig#doExportUrls()
 
