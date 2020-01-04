@@ -1,32 +1,44 @@
 ## 引言
 
-研究源码是一个充满疑惑并且非常枯燥的过程，因为在研究的过程中可能很多你都看不懂，所以我们最好先带着问题去看源码，这样即使研究完后还是存在很多疑问，但是我们至少抓住了重点。
+研究源码是一个非常枯燥并且充满疑惑的过程，因为在研究的过程中可能存在诸多疑点，在这里和大家分享一句话：“抓住主要，忽略次要”，一个人的精力是有限的，要想在有限的时间内更高效地学习，相信这句话会对你有所帮助。另外，笔者研究的源码基于 <code><font color="#de2c58">2.6.7</font></code> 版本，不想自己搭 Project 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubbo/tree/2.6.x) 仓库去下载。
 
-## 服务暴露过程中重要步骤
+下面我列出了一些 Dubbo 服务提供者在暴露服务过程中的一些重要部分，本篇文章并不会对以下所有的点进行详细的分析，未分析到的会在后面的系列文章中有所介绍。
 
-1. 延时暴露实现原理
+1、Dubbo 延时暴露机制是如何实现的
 
-2. 何时向注册中心注册服务
+2、何时向注册中心注册服务
 
-3. 服务提供者与注册中心的心跳机制
+3、服务提供者与注册中心的心跳机制
 
-4. 服务提供者与注册中心的心跳机制
-
-上面列举了服务暴露整个过程中一些重要的步骤，由于 Dubbo 系列文章的设计，本文并不会对上述所有步骤进行详细介绍，哪些步骤对应哪篇文章需要读者自己去看，笔者相信只要是仔细研究过 Dubbo 的找到其所在位置应该不是难事。
-
-## 暴露总体过程
+## 服务暴露总体过程
 
 在详细研究服务暴露细节之前，我们先看一下整体 RPC 的暴露原理，如图 5-4。
 
-从整体上看，Dubbo 框架做服务暴露分为两大部分，第一步将持有的服务实例通过代理转换成 Invoker，第二步把 Invoker 通过具体的协议（比如 Dubbo） 转换成 Exporter，框架做了这层抽象大大方便了功能扩展。这里的 Invoker 可以简单的理解成一个真实的服务对象实例，是 Dubbo 框架实体域，所有模型都会向它靠拢，可向他发起 invoke 调用。它可能是一个本地实现，也可能是一个远程实现，还可能是一个集群实现。
+从整体上看，Dubbo 框架做服务暴露分为两大部分，第一步将持有的服务实例通过代理转换成 Invoker，第二步把 Invoker 通过具体的协议（比如 DubboProtocol） 转换成 Exporter，框架做了这层抽象大大方便了功能扩展。这里的 Invoker 可以简单的理解成一个真实的服务对象实例，是 Dubbo 框架实体域，所有模型都会向它靠拢，可向他发起 invoke 调用。它可能是一个本地实现，也可能是一个远程实现，还可能是一个集群实现。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103152846267-1509479241.png)
 
-在正式研究源码之前有必要先说一下，笔者研究的源码基于 <code><font color="#de2c58">2.6.7</font></code> 版本的 <code><font color="#de2c58">dubbo-samples-api</font></code> 工程，不想自己搭 Demo 的朋友可以去 Dubbo 官网或者笔者的 [github](https://github.com/tiankaizhi/dubbo/tree/2.6.x) 仓库去下载。
+Dubbo 和 Spring 整合后，服务暴露触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#de2c58">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#de2c58">ServiceBean </font></code> 会执行 <code><font color="#de2c58">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法。
 
-## 暴露入口
+## ServiceBean
 
-### ServiceConfig#export()
+### onApplicationEvent(ContextRefreshedEvent event)
+
+```java
+@Override
+public void onApplicationEvent(ContextRefreshedEvent event) {
+    if (isDelay() && !isExported() && !isUnexported()) {
+        if (logger.isInfoEnabled()) {
+            logger.info("The service ready on spring started. service: " + getInterface());
+        }
+        export();
+    }
+}
+```
+
+## ServiceConfig
+
+### export()
 
 ```java
 public synchronized void export() {
@@ -55,54 +67,39 @@ public synchronized void export() {
 }
 ```
 
-代码 @1 处判断是否暴露服务，根据 <code><font color="#de2c58">dubbo:service export="true|false"</font></code> 设置
+代码 @1，判断是否暴露服务，根据 <code><font color="#de2c58">dubbo:service export="true|false"</font></code> 设置。
 
-代码 @2 处如果 <code><font color="#de2c58">delay</font></code> 大于 0，表示延迟多少毫秒后暴露服务，延迟暴露采用的是 JDK 的 <code><font color="#de2c58">ScheduledExecutorService</font></code> 进行调度的。
+代码 @2，如果 <code><font color="#de2c58">delay</font></code> 大于 0，表示延迟多少毫秒后暴露服务，延迟暴露采用的是 JDK 的 <code><font color="#de2c58">ScheduledExecutorService</font></code> 进行调度的。
 
 ```java
 private static final ScheduledExecutorService delayExportExecutor = Executors.newSingleThreadScheduledExecutor(new NamedThreadFactory("DubboServiceDelayExporter", true));
 ```
 
-延时调度机制触发时机是当 Spring 容器实例化 bean 完成，走到最后一步发布 <code><font color="#de2c58">ContextRefreshEvent</font></code> 事件的时候，<code><font color="#de2c58">ServiceBean </font></code> 会执行 <code><font color="#de2c58">onApplicationEvent</font></code> 方法，该方法调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法。
-
-### ServiceBean#onApplicationEvent(ContextRefreshedEvent event)
-```java
-@Override
-public void onApplicationEvent(ContextRefreshedEvent event) {
-    if (isDelay() && !isExported() && !isUnexported()) {
-        if (logger.isInfoEnabled()) {
-            logger.info("The service ready on spring started. service: " + getInterface());
-        }
-        export();
-    }
-}
-```
-
-### ServiceConfig#doExportUrls()
+### doExport()
 
 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">export</font></code> 方法会调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">doExport</font></code> 方法，到 319 行处。接下来调用 <code><font color="#de2c58">ServiceConfig</font></code> 的 <code><font color="#de2c58">doExportUrls</font></code> 正式开始暴露服务。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103154204128-608191016.png)
 
+### doExportUrls()
+
 ```java
 @SuppressWarnings({"unchecked", "rawtypes"})
-    private void doExportUrls() {
+private void doExportUrls() {
 
-      // @1 加载所有的注册中心 URL 地址
-      List<URL> registryURLs = loadRegistries(true);
+    // @1 加载所有的注册中心 URL 地址
+    List<URL> registryURLs = loadRegistries(true);
 
-      // @2 遍历所有协议, 按照协议依次向每个注册中心暴露服务
-      for (ProtocolConfig protocolConfig : protocols) {
-          doExportUrlsFor1Protocol(protocolConfig, registryURLs);
-      }
-  }
+    // @2 遍历所有协议, 按照协议依次向每个注册中心暴露服务
+    for (ProtocolConfig protocolConfig : protocols) {
+        doExportUrlsFor1Protocol(protocolConfig, registryURLs);
+    }
+}
 ```
 
-#### AbstractInterfaceConfig#loadRegistries(true)
+代码 @1，调用 ServiceConfig 父类 AbstractInterfaceConfig 的 <code><font color="#de2c58">loadRegistries(boolean provider)</font></code> 方法。参数 **true** 代表服务提供者，**false** 代表服务消费者，如果是服务提供者。
 
-调用父类的 loadRegistries(true) 方法
-
-代码 @3 处 <code><font color="#de2c58">loadRegistries(true)</font></code>，参数 true 代表服务提供者，false 代表服务消费者，如果是服务提供者，则检测注册中心的配置，如果配置了 <code><font color="#de2c58">register="false"</font></code>，则忽略该地址，如果是服务消费者，并配置了 <code><font color="#de2c58">subscribe="false"</font></code> 则表示不从该注册中心订阅服务，故也不返回。如果没有显示指定的服务注册中心，则默认会使用全局配置的注册中心。
+### loadRegistries(true)
 
 ```java
     /**
@@ -169,24 +166,44 @@ public void onApplicationEvent(ContextRefreshedEvent event) {
     }
 ```
 
-代码 @1 处 <code><font color="#de2c58">address(true)</font></code> 可以使用 "|" 或者 ";" 作为分隔符，设置多个注册中心分组。注意，一个注册中心集群是一个分组，而不是多个。
+代码 @1，这个方法从名字上很难看出具体的含义，看下图的注释
 
-这个方法从名字上很难看出具体的含义，看下图的注释，相信胖友能理解
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200105002131763-2003783240.png)
 
-![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103154425571-84229574.png)
+这里有一个问题，如果服务暴露是多注册中心或者是一个注册的中心集群，从配置获取到的 ```List<RegistryConfig>``` 和 loadRegistries 加载之后的注册中心 ```List<URL>``` 分别是什么样子的。
+
+**单注册中心单例情况下:**
+
+```xml
+<dubbo:registry id="first-registry" protocol="zookeeper" address="192.168.25.128:2181"/>
+```
+
+首先 AbstractInterfaceConfig 的 ```protected List<RegistryConfig> registries```
+
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200105002252990-1784770658.png)
+
+我们看一下加载完的 ```List<URL> registryURLs``` 值：
+
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200105002338292-1916124233.png)
+
+**多注册中心，每个注册中心有多个实例的情况下：**
+
+AbstractInterfaceConfig 的 ```protected List<RegistryConfig> registries``` 值：
+
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200105002400911-1493662432.png)
+
+加载完的 ```List<URL> registryURLs``` 值：
+
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200105002419066-1508346108.png)
 
 代码 @2，若是服务提供者，判断是否只订阅不注册。如果是，不添加结果到 registryList 中。对应 [《Dubbo 用户指南 —— 只订阅》](http://dubbo.apache.org/zh-cn/docs/user/demos/subscribe-only.html) 文档。
 代码 @3，若是服务消费者，判断是否只注册不订阅。如果是，不添加到结果 registryList 。对应 [《Dubbo 用户指南 —— 只注册》](http://dubbo.apache.org/zh-cn/docs/user/demos/registry-only.html) 文档。
 
-我们看一下加载完的 <code><font color="#f52814">registryList</font></code> 值：
-
-![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103154728121-804559956.png)
-
-#### ServiceConfig#doExportUrlsFor1Protocol(protocolConfig, registryURLs)
+### doExportUrlsFor1Protocol(protocolConfig, registryURLs)
 
 加载完所有配置的注册中心 URL 之后，开始按照协议进行暴露。Dubbo 支持相同服务暴露多个协议。
 
-我们看一下 <code><font color="#f52814">doExportUrlsFor1Protocol</font></code> 方法具体暴露逻辑，我们先看一下入参吧，分别是暴露协议和注册中心 URL
+我们先看一下协议和注册中心入参
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103154904068-2023144680.png)
 
@@ -196,7 +213,7 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
     // don't export when none is configured
     if (!Constants.SCOPE_NONE.toString().equalsIgnoreCase(scope)) {
 
-        // 本地暴露
+        // 本地暴露（这里暂时不分析，后面就本地暴露写一篇文章进行详细地分析）
         // export to local if the config is not remote (export to remote only when config is remote)
         if (!Constants.SCOPE_REMOTE.toString().equalsIgnoreCase(scope)) {
             exportLocal(url);
@@ -261,7 +278,9 @@ private void doExportUrlsFor1Protocol(ProtocolConfig protocolConfig, List<URL> r
 
 代码 @4，创建 <code><font color="#de2c58">com.alibaba.dubbo.config.invoker.DelegateProviderMetaDataInvoker</font></code> 对象。该对象在 Invoker 对象的基础上，增加了当前服务提供者 ServiceConfig 对象
 
-#### Protocol#export(invoker) 暴露服务
+## Protocol
+
+### export(Invoker<T> invoker) throws RpcException
 
 此处 Dubbo SPI 自适应的特性的好处就出来了，可以自动根据 URL 参数，获得对应的拓展实现。例如，invoker 传入后，根据 invoker.url 自动获得对应 Protocol 拓展实现为 DubboProtocol 。
 
@@ -534,25 +553,31 @@ private void openServer(URL url) {
 代码 @1，为什么会存在呢？因为键是 host:port ，那么例如，多个 Service 共用同一个 Protocol ，服务器是同一个对象，不要重复创建。
 
 ```java
+/**
+ * 创建服务器
+ */
 private ExchangeServer createServer(URL url) {
-    // 默认开启 server 关闭时发送 READ_ONLY 事件
     // send readonly event when server closes, it's enabled by default
+    // 为服务提供者 url 增加 channel.readonly.sent 属性，默认为 true，表示在发送请求时，是否等待将字节写入 socket 后再返回，默认为 true.
     url = url.addParameterIfAbsent(Constants.CHANNEL_READONLYEVENT_SENT_KEY, Boolean.TRUE.toString());
-    // 默认开启 heartbeat
+
     // enable heartbeat by default
+    // 为服务提供者 url 增加 heartbeat 属性，表示心跳间隔时间，默认为 60*1000，表示 60s.
     url = url.addParameterIfAbsent(Constants.HEARTBEAT_KEY, String.valueOf(Constants.DEFAULT_HEARTBEAT));
+
+    // 为服务提供者 url 增加 server 属性，可选值为 netty，mina 等等，默认为 netty.
     String str = url.getParameter(Constants.SERVER_KEY, Constants.DEFAULT_REMOTING_SERVER);
 
-    // 校验 Server 的 Dubbo SPI 拓展是否存在，若不存在，抛出 RpcException 异常。
+    // 校验 Server 的 Dubbo SPI 拓展是否存在，若不存在，抛出 RpcException 异常.
     if (str != null && str.length() > 0 && !ExtensionLoader.getExtensionLoader(Transporter.class).hasExtension(str))
         throw new RpcException("Unsupported server type: " + str + ", url: " + url);
 
-    // 设置编解码器为 Dubbo，即 DubboCountCodec
+    // 设置编解码器为 Dubbo，即 DubboCountCodec.
     url = url.addParameter(Constants.CODEC_KEY, DubboCodec.NAME);
-
-    // 启动服务器
     ExchangeServer server;
     try {
+        // 根据服务提供者 URI,服务提供者命令请求处理器 requestHandler 构建 ExchangeServer 实例.
+        // requestHandler 的实现具体在以后详细分析 Dubbo 服务调用时再详细分析
         server = Exchangers.bind(url, requestHandler);
     } catch (RemotingException e) {
         throw new RpcException("Fail to start server(url: " + url + ") " + e.getMessage(), e);
@@ -569,6 +594,8 @@ private ExchangeServer createServer(URL url) {
     return server;
 }
 ```
+**ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException**
+
 执行 `Exchangers.bind(url,requestHandler)` 方法之前看一下参数列表
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155219634-2093649874.png)
