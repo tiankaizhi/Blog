@@ -596,7 +596,6 @@ private ExchangeServer createServer(URL url) {
     return server;
 }
 ```
-**ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException**
 
 执行 `Exchangers.bind(url,requestHandler)` 方法之前看一下参数列表
 
@@ -623,7 +622,7 @@ public static ExchangeServer bind(URL url, ExchangeHandler handler) throws Remot
 
 ## HeaderExchanger
 
-### HeaderExchanger.bind(URL url, ExchangeHandler handler) throws RemotingException
+### HeaderExchanger.bind(URL url, ExchangeHandler handler)
 
 ```java
 public class HeaderExchanger implements Exchanger {
@@ -645,7 +644,7 @@ public class HeaderExchanger implements Exchanger {
 从这里可以看出，端口的绑定由 Transporters 的 bind 方法实现
 
 ## Transporters
-### Server bind(URL url, ChannelHandler... handlers) throws RemotingException
+### Server bind(URL url, ChannelHandler... handlers)
 
 ```java
 public static Server bind(URL url, ChannelHandler... handlers) throws RemotingException {
@@ -668,7 +667,7 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
 代码 @1 处的 ```getTransporter()``` 根据 SPI 具体实现是 netty4 下的 NettyTransporter（同样这块细节在这里不展开）
 
 ## NettyTransporter
-### Server bind(URL url, ChannelHandler listener) throws RemotingException
+### Server bind(URL url, ChannelHandler listener)
 
 ```java
 public class NettyTransporter implements Transporter {
@@ -694,7 +693,7 @@ public class NettyTransporter implements Transporter {
 
 ![](https://img2018.cnblogs.coRegistryProtocol#export(invoker)m/blog/1326851/202001/1326851-20200103155438677-212238394.png)
 
-**NettyServer**
+## NettyServer
 
 ```java
 public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
