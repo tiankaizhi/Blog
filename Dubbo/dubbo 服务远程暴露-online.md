@@ -369,7 +369,7 @@ public static RegistryProtocol getRegistryProtocol() {
   + 用于创建注册中心 Registry 对象。
 
 
-### RegistryProtocol#export(invoker)
+### export(final Invoker<T> originInvoker)
 
 ```java
 public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcException {
@@ -414,7 +414,7 @@ public <T> Exporter<T> export(final Invoker<T> originInvoker) throws RpcExceptio
 
 代码 @1，调用 <code><font color="#de2c58">#doLocalExport(invoker)</font></code> 方法，暴露服务
 
-#### RegistryProtocol#doLocalExport()
+### doLocalExport(final Invoker<T> originInvoker)
 
 ```java
 /**
@@ -463,7 +463,7 @@ private <T> ExporterChangeableWrapper<T> doLocalExport(final Invoker<T> originIn
 代码 @4，调用 <code><font color="#de2c58">DubboProtocol#export(invoker)</font></code> 方法，暴露服务，返回 Exporter 对象。
 使用【创建的 Exporter 对象】+【originInvoker】，创建 ExporterChangeableWrapper 对象。这样，originInvoker 就和 Exporter 对象，形成了绑定的关系。
 
-### DubboProtocol
+## DubboProtocol
 
 **com.alibaba.dubbo.rpc.protocol.dubbo.DubboProtocol**，实现 **AbstractProtocol** 抽象类，Dubbo 协议实现类。
 
@@ -484,7 +484,7 @@ private final Map<String, ExchangeServer> serverMap = new ConcurrentHashMap<Stri
 
 serverMap 属性，通信服务器集合。其中，Key 为服务器地址，格式为 host:port。
 
-#### DubboProtocol#export(Invoker<T> invoker)
+### export(Invoker<T> invoker)
 ```java
 @Override
 public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
@@ -524,6 +524,7 @@ public <T> Exporter<T> export(Invoker<T> invoker) throws RpcException {
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155132130-827625128.png)
 
+### openServer(URL url)
 ```java
 /**
   * 启动通信服务器
@@ -552,6 +553,7 @@ private void openServer(URL url) {
 ```
 代码 @1，为什么会存在呢？因为键是 host:port ，那么例如，多个 Service 共用同一个 Protocol ，服务器是同一个对象，不要重复创建。
 
+### createServer(URL url)
 ```java
 /**
  * 创建服务器
@@ -600,7 +602,9 @@ private ExchangeServer createServer(URL url) {
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155219634-2093649874.png)
 
-#### Exchangers#bind(URL url, ExchangeHandler handler)
+## Exchangers
+
+### ExchangeServer bind(URL url, ExchangeHandler handler)
 
 ```java
 public static ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException {
@@ -611,44 +615,15 @@ public static ExchangeServer bind(URL url, ExchangeHandler handler) throws Remot
         throw new IllegalArgumentException("handler == null");
     }
     url = url.addParameterIfAbsent(Constants.CODEC_KEY, "exchange");
-    return getExchanger(url).bind(url, handler);
+    return getExchanger(url).bind(url, handler); // @1
 }
 ```
 
-上述代码不难看出，首先根据 url 获取 Exchanger 实例，然后调用 bind 方法构建 ExchangeServer，Exchanger 接口如下：
+代码 @1 的前半部分 ```getExchanger(url)``` 获取的的是默认的 **HeaderExchanger**（这块并不复杂，读者自己去研究），然后调用 bind 方法构建 ExchangeServer。
 
-```java
-@SPI(HeaderExchanger.NAME)
-public interface Exchanger {
+## HeaderExchanger
 
-    /**
-     * bind.
-     *
-     * @param url
-     * @param handler
-     * @return message server
-     */
-    @Adaptive({Constants.EXCHANGER_KEY})
-    ExchangeServer bind(URL url, ExchangeHandler handler) throws RemotingException;
-
-    /**
-     * connect.
-     *
-     * @param url
-     * @param handler
-     * @return message channel
-     */
-    @Adaptive({Constants.EXCHANGER_KEY})
-    ExchangeClient connect(URL url, ExchangeHandler handler) throws RemotingException;
-}
-```
-
-+ ExchangeServer bind(URL url, ExchangeHandler handler)：服务提供者调用。
-+ ExchangeClient connect(URL url, ExchangeHandler handler)：服务消费者调用。
-
-Exchanger 具体的实现类为：HeaderExchanger
-
-**HeaderExchanger.bind(URL url, ExchangeHandler handler) throws RemotingException**
+### HeaderExchanger.bind(URL url, ExchangeHandler handler) throws RemotingException
 
 ```java
 public class HeaderExchanger implements Exchanger {
@@ -669,7 +644,8 @@ public class HeaderExchanger implements Exchanger {
 ```
 从这里可以看出，端口的绑定由 Transporters 的 bind 方法实现
 
-**Transporters#bind(URL url, ChannelHandler... handlers) throws RemotingException**
+## Transporters
+### Server bind(URL url, ChannelHandler... handlers) throws RemotingException
 
 ```java
 public static Server bind(URL url, ChannelHandler... handlers) throws RemotingException {
@@ -689,21 +665,10 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
 }
 ```
 
-**Transporters#getTransporter()**
+代码 @1 处的 ```getTransporter()``` 根据 SPI 具体实现是 netty4 下的 NettyTransporter（同样这块细节在这里不展开）
 
-```java
-public static Transporter getTransporter() {
-    return ExtensionLoader.getExtensionLoader(Transporter.class).getAdaptiveExtension();
-}
-```
-
-看一下 Transporters 的实现
-
-![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155322187-1954255084.png)
-
-根据 SPI 实现具体是 netty4 下的 NettyTransporter
-
-**Transporters#getTransporter()**
+## NettyTransporter
+### Server bind(URL url, ChannelHandler listener) throws RemotingException
 
 ```java
 public class NettyTransporter implements Transporter {
