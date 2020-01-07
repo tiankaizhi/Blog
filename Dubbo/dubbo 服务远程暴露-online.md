@@ -664,7 +664,7 @@ public static Server bind(URL url, ChannelHandler... handlers) throws RemotingEx
 }
 ```
 
-代码 @1 处的 ```getTransporter()``` 根据 SPI 具体实现是 netty4 下的 NettyTransporter（同样这块细节在这里不展开）
+代码 @1 处的 ```getTransporter()``` 根据 SPI 具体实现是 netty4 下的 NettyTransporter。
 
 ## NettyTransporter
 ### Server bind(URL url, ChannelHandler listener)
@@ -682,7 +682,7 @@ public class NettyTransporter implements Transporter {
     @Override
     public Client connect(URL url, ChannelHandler listener) throws RemotingException {
         return new NettyClient(url, listener);
-    }RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)
+    }
 
 }
 ```
@@ -690,8 +690,6 @@ public class NettyTransporter implements Transporter {
 注意：这里有一个语义级别的转换，ChannelHandler 转变为 listener 语义，说明 ChannelHandler 的具体实现应该实现了 listener 的语义功能。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155407777-1624431172.png)
-
-![](https://img2018.cnblogs.coRegistryProtocol#export(invoker)m/blog/1326851/202001/1326851-20200103155438677-212238394.png)
 
 ## NettyServer
 
@@ -708,3 +706,38 @@ public NettyServer(URL url, ChannelHandler handler) throws RemotingException {
 http://dubbo.apache.org
 https://blog.csdn.net/prestigeding/article/details/80637239
 http://svip.iocoder.cn/Dubbo/service-export-remote-dubbo/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1
