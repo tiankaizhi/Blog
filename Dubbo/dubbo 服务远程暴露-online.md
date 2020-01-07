@@ -718,7 +718,7 @@ public class NettyTransporter implements Transporter {
     @Override
     public Client connect(URL url, ChannelHandler listener) throws RemotingException {
         return new NettyClient(url, listener);
-    }
+    }RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)RegistryProtocol#export(invoker)
 
 }
 ```
@@ -727,7 +727,7 @@ public class NettyTransporter implements Transporter {
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155407777-1624431172.png)
 
-![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200103155438677-212238394.png)
+![](https://img2018.cnblogs.coRegistryProtocol#export(invoker)m/blog/1326851/202001/1326851-20200103155438677-212238394.png)
 
 **NettyServer**
 
