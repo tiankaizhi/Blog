@@ -70,8 +70,23 @@
 
 ![](assets/markdown-img-paste-20200116182105829.png)
 
+![](assets/markdown-img-paste-20200116183132648.png)
 
+![](assets/markdown-img-paste-2020011618320969.png)
 
+![](assets/markdown-img-paste-20200116183243880.png)
+
+![](assets/markdown-img-paste-20200116183309688.png)
+
+![](assets/markdown-img-paste-2020011618334122.png)
+
+![](assets/markdown-img-paste-20200116183420368.png)
+
+![](assets/markdown-img-paste-20200116183519580.png)
+
+![](assets/markdown-img-paste-20200116183639985.png)
+
+![](assets/markdown-img-paste-20200116183940855.png)
 
 
 
