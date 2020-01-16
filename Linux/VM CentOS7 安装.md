@@ -5,7 +5,6 @@
 ## 下载 CentOS 7 镜像
 
 小伙伴们可以去[官方网站](http://isoredirect.centos.org/centos/7/isos/x86_64/)下载，官网下载慢的小伙伴们可以去[华为云](http://mirrors.huaweicloud.com/centos/7.7.1908/isos/x86_64/)下载
-
 ![](assets/markdown-img-paste-20200115233100827.png)
 
 >小贴士:
