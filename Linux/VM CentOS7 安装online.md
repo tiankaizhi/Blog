@@ -140,10 +140,43 @@ VMwear 会将主流的配置应用在虚拟机的操作系统上，对于新手�
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183344667-835846246.png)
 
-查看系统 IP 地址，显示未找到改命令。原因是安装系统的时候选择的是最小化安装，所以系统未安装 net-tools 软件，这里我们自己安装。执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令，紧接着又报错，出多的原因是 **安装系统时网卡没有打开，导致了无法连接网络**
+查看系统 IP 地址，显示未找到改命令。原因是安装系统的时候选择的是最小化安装，所以系统未安装 net-tools 软件，这里我们自己安装。执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令，紧接着又报错，出多的原因是 **安装系统时网卡没有打开，导致了无法连接网络**。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183424055-970240701.png)
 
+开始配置网卡
+
+执行 <code><font color="#de2c58">nmcli d</font></code> 查看自己本机的网卡
+
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200118130418048-1717835346.png)
+
+进入 <code><font color="#de2c58">/etc/sysconfig/network-scripts/</font></code> 目录下，修改 <code><font color="#de2c58">ifcfg-ens33</font></code> 网卡配置:
+
+1. <code><font color="#de2c58">BOOTPROTO</font></code> 参数代表 IP 地址分配方式，<code><font color="#de2c58">dhcp</font></code> 表示由 dhcp 服务器动态分配 IP 地址，<code><font color="#de2c58">static</font></code> 是通过自己设置静态的 IP 地址
+
+2. <code><font color="#de2c58">ONBOOT</font></code> 参数，<code><font color="#de2c58">yes</font></code> 表示系统启动时自动激活网卡，<code><font color="#de2c58">no</font></code> 则相反。
+
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183645671-1073100919.png)
 
+执行 <code><font color="#de2c58">systemctl restart network</font></code> 重启网络服务。然后重新执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令发现可以联网安装了。
+
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116184034049-898978228.png)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1
