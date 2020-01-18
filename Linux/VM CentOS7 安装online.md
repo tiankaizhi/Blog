@@ -1,27 +1,27 @@
 ## 首先下载并安装 VMware
 
-安装 VMware 较为简单，这里就贴出来了，小伙伴们可以自己去[官方网站](https://www.vmware.com)下载安装。
+安装 VMware 较为简单，这里就不贴出来了，需要的小伙伴可以自己去[官方网站](https://www.vmware.com)下载安装。
 
 ## 下载 CentOS 7 镜像
 
-小伙伴们可以去[官方网站](http://isoredirect.centos.org/centos/7/isos/x86_64/)下载，官网下载慢的小伙伴们可以去[华为云](http://mirrors.huaweicloud.com/centos/7.7.1908/isos/x86_64/)下载。博主是在华为云下载的，以下是华为云的下载页面。
-![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116175040894-594174732.png)
+CentOS 系统可以去[官方网站](http://isoredirect.centos.org/centos/7/isos/x86_64/)下载，官网下载慢的小伙伴可以去[华为云](http://mirrors.huaweicloud.com/centos/7.7.1908/isos/x86_64/)下载。以下是华为云的下载页面。
+![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200118225758581-2046752360.png)
 
 CentOS 一共分为 6 个版本，各版本介绍如下：
 
-> CentOS-7-x86_64-DVD-1908 &emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;标准安装版（推荐）
+> CentOS-7-x86_64-DVD-1908 &emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp;标准安装版（推荐）
 >
 > CentOS-7-x86_64-Everything-1908 &emsp;&emsp;&emsp;完整版，集成所有软件（以用来补充系统的软件或者填充本地镜像）
 >
-> CentOS-7-x86_64-LiveGNOME-1908 &emsp;&emsp;GNOME 桌面版
+> CentOS-7-x86_64-LiveGNOME-1908 &emsp;&emsp;&nbsp;GNOME 桌面版
 >
-> CentOS-7-x86_64-LiveKDE-1908&emsp;&emsp;&emsp;&emsp;KDE 桌面版  
+> CentOS-7-x86_64-LiveKDE-1908&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;KDE 桌面版  
 >
 > CentOS-7-x86_64-Minimal-1908 &emsp;&emsp;&emsp;&emsp;&nbsp;精简版（自带的软件最少）
 >
 > CentOS-7-x86_64-NetInstall-1908 &emsp;&emsp;&emsp;&nbsp;&nbsp;网络安装版（从网络安装或者救援系统）
 
-博主使用的是标准安装版。
+一般无特殊需求推荐使用标准安装版。
 
 ## 安装 CentOS 7
 
@@ -37,33 +37,33 @@ CentOS 一共分为 6 个版本，各版本介绍如下：
 
 VMwear 会将主流的配置应用在虚拟机的操作系统上，对于新手来很友好。
 
-如果没有特殊需求建议选择典型安装
+如果没有特殊需求建议选择典型安装，然后点击“下一步”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116175243466-1590414318.png)
 
-选择稍后安装操作系统
+选择稍后安装操作系统，然后点击“下一步”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116175628551-243479869.png)
 
-操作系统这里选择 Linux 下的 CentOS
+客户机操作系统这里选择 Linux 系统，版本选择 CentOS 64 位。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116175813967-1520894812.png)
 
-磁盘容量根据自身机器磁盘容量进行合理配置，这里暂时分配 40G 即可，后期可以合理扩减。
+磁盘容量根据自身机器磁盘容量进行合理配置，这里暂时分配 40G 即可，后期根据自身需求可以合理增减。
 
-勾选将虚拟磁盘拆分成多个文件，这样可以使虚拟机方便用储存设备拷贝复制。
+勾选将虚拟磁盘拆分成多个文件，这样可以使虚拟机系统文件方便用储存设备拷贝复制。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116175958503-259976874.png)
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116180135894-710157707.png)
 
-自定义硬件可以根据自己的需要移除，比如: 声卡、打印机等。
+自定义硬件可以根据自己的需要进行添加或移除，假设系统是作为服务器使用，那么声卡、打印机一般不太需要，可以将其移除。
 
-选择下载的 IOS 镜像文件
+选择下载好的 IOS 镜像文件。设置完毕之后点击“关闭”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116180301159-507019049.png)
 
-开启虚拟机
+点击“开启此虚拟机”开启系统。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116180421957-438150051.png)
 
@@ -71,57 +71,53 @@ VMwear 会将主流的配置应用在虚拟机的操作系统上，对于新手�
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116180752301-1459080106.png)
 
-系统语言可以根据自己的需求，这里选择中文简体
+系统语言可以根据自己的需求，这里选择中文简体，然后点击“继续”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116180845313-1794516526.png)
 
-时区选择上海，修改日期和时间。
+时区选择亚洲上海并修改日期和时间，然后点击“完成”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116180938810-1283686676.png)
 
-注意，目录分区是非常重要的一步，联系安装 Windows 系统时的磁盘分区比较容易理解。
+注意，目录分区是非常重要的一步，Linux 平台下的目录分区可以类比安装 Windows 系统时的磁盘分区。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181024733-93406783.png)
 
-分区方案要选择 LVM，然后点击加号进行磁盘分区
-
-这里需要注意，安装 Linux 系统时的分区有三个是必须的：/boot 分区、/swap 分区和 / 分区，/boot 分区类似于 Windows 中的 C 盘，大小一般设置为 512M；
+分区方案要选择 LVM，然后点击加号进行磁盘分区。这里需要注意，安装 Linux 系统时的分区有三个是必须的：<code><font color="#de2c58">/boot</font></code> 分区、<code><font color="#de2c58">/swap</font></code> 分区和 <code><font color="#de2c58">/</font></code> 分区，<code><font color="#de2c58">/boot</font></code> 分区类似于 Windows 中的 C 盘，大小一般设置为 512M。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181145929-1590235116.png)
 
-/swap 分区就是系统的内存分区，大小一般时新建虚拟机时内存的 2 倍；
+<code><font color="#de2c58">/swap</font></code> 分区就是系统的内存分区，大小一般时新建虚拟机时内存的 2 倍。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181218094-895819621.png)
 
-/ 分区 是根目录分区，类似 Windows 系统中的文件除 C 盘之外的磁盘分区，大小最大；由于是最后新建的挂载点，那么期望容量可以不写，会默认把剩下的磁盘容量都分配给它。
-
-其他分区也可以根据自身需求进行创建，比如 /home，/data 分区，这些算是用户自定义分区，存放用户自己的数据或者程序，不是必须的。
+<code><font color="#de2c58">/</font></code> 分区是根目录分区，类似 Windows 系统中的文件除 C 盘之外的磁盘分区，大小最大；由于是最后新建的挂载点，那么期望容量可以不写，会默认把剩下的磁盘容量都分配给它。其他分区也可以根据自身需求进行创建，比如 <code><font color="#de2c58">/home</font></code>，<code><font color="#de2c58">/data</font></code> 分区，这些算是用户自定义分区，存放用户自己的数据或者程序，不是必须的。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181244734-62701441.png)
+
+按照上述步骤将 <code><font color="#de2c58">/boot</font></code> 分区、<code><font color="#de2c58">/swap</font></code> 分区和 <code><font color="#de2c58">/</font></code> 分区 都分配好之后，点击左上角“完成”弹出更改摘要，继续点击“接受更改”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181329397-2082342035.png)
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181359810-1155591263.png)
 
-接下来进行网络设置
+接下来进行网络和主机名设置。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181514996-519272536.png)
 
-设置完主机名称，点击应用，再点击配置，进行网络配置。
-
-注意这里的网络配置是现在安装的 CentOS 的 IP 配置，如果在这里不进行配置，也可以在安装完系统后，自己在系统中进行配置。
+设置完主机名称，点击“应用”，再点击“配置”，进行网络配置。注意：这里的网络配置是现在正在安装的 CentOS 的 IP 配置，如果在这里不进行配置，也可以在安装完系统后，自己在系统中进行配置。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181613378-858249149.png)
 
-如下图所示，连接名称是 ens33，这个不需要更改，如下图所以，点击 IPv4 配置，方法选择手动，点击 Add 添加 IP 地址：
+网卡名称是 <code><font color="#de2c58">ens33</font></code>，这个不需要更改，点击 “IPv4 配置”，方法选择手动，点击 “Add” 添加 IP 地址，子网掩码和网关。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116181835073-2046751235.png)
 
-网关是之前虚拟机网络配置里面的网关，IP 地址自己设置，但是必须在 192.168.18.x 网段中，然后点击保存完成 IP 地址设置。
+网关是之前虚拟机网络配置里面的网关，IP 地址自己设置，但是必须在 192.168.18.x 网段中，然后点击“保存”完成 IP 地址设置。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116182110681-637004631.png)
 
-点击打开以太网，可以看到 IP 地址已经设置完成后的配置情况，点击完成，就完成了所有配置，开始 CentOS 7 的安装。
+点击“打开以太网”，可以看到 IP 地址已经设置完成后的配置情况，继续点击左上角的“完成”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183023936-676389996.png)
 
@@ -129,7 +125,7 @@ VMwear 会将主流的配置应用在虚拟机的操作系统上，对于新手�
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183127887-1767177484.png)
 
-开始安装，在安装的过程中可以自己设置 root 用户的密码，还可以自己添加一个用户，这些都可以自己设置，但是一定要记住 root 用户密码。
+开始安装，在安装的过程中可以自己设置 root 用户的密码，还可以自己添加用户，这些都可以自己设置，但是一定要记住 root 用户密码。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183214194-1153147934.png)
 
@@ -139,24 +135,26 @@ VMwear 会将主流的配置应用在虚拟机的操作系统上，对于新手�
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183344667-835846246.png)
 
-查看系统 IP 地址，显示未找到改命令。原因是安装系统的时候选择的是最小化安装，所以系统未安装 net-tools 软件，这里我们自己安装。执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令，紧接着又报错，出多的原因是 **安装系统时网卡没有打开，导致了无法连接网络**。
+执行 <code><font color="#de2c58">ifconfig</font></code> 命令查看系统 IP 地址，显示未找到改命令。原因是安装系统的时候选择的是最小化安装，所以系统未安装 net-tools 软件，这里我们自行安装，执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令，紧接着又报错，出多的原因是 **安装系统时网卡没有打开，导致了无法连接网络**。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183424055-970240701.png)
 
 开始配置网卡
 
-执行 <code><font color="#de2c58">nmcli d</font></code> 查看自己本机的网卡
+首先执行 <code><font color="#de2c58">nmcli d</font></code> 查看自己本机的网卡
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200118130418048-1717835346.png)
 
 进入 <code><font color="#de2c58">/etc/sysconfig/network-scripts/</font></code> 目录下，修改 <code><font color="#de2c58">ifcfg-ens33</font></code> 网卡配置:
 
-1. <code><font color="#de2c58">BOOTPROTO</font></code> 参数代表 IP 地址分配方式，<code><font color="#de2c58">dhcp</font></code> 表示由 dhcp 服务器动态分配 IP 地址，<code><font color="#de2c58">static</font></code> 是通过自己设置静态的 IP 地址
+> <code><font color="#de2c58">BOOTPROTO</font></code> 参数代表 IP 地址分配方式，<code><font color="#de2c58">dhcp</font></code> 表示由 dhcp 服务器动态分配 IP 地址，<code><font color="#de2c58">none</font></code> 是通过自己设置静态的 IP 地址。
 
-2. <code><font color="#de2c58">ONBOOT</font></code> 参数，<code><font color="#de2c58">yes</font></code> 表示系统启动时自动激活网卡，<code><font color="#de2c58">no</font></code> 则相反。
+> <code><font color="#de2c58">ONBOOT</font></code> 参数，<code><font color="#de2c58">yes</font></code> 表示系统启动时自动激活网卡，<code><font color="#de2c58">no</font></code> 则相反。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116183645671-1073100919.png)
 
-执行 <code><font color="#de2c58">systemctl restart network</font></code> 重启网络服务。然后重新执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令发现可以联网安装了。
+执行 <code><font color="#de2c58">systemctl restart network</font></code> 重启网络服务。然后重新执行 <code><font color="#de2c58">sudo yum install net-tools</font></code> 命令发现可以联网了。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200116184034049-898978228.png)
+
+到这里使用 VMware 安装 CentOS 7 非 GONE 桌面版系统就全部结束了。
