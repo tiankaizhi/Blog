@@ -1,6 +1,34 @@
 ## 首先下载并安装 VMware
 
-安装 VMware 较为简单，这里就贴出来了，小伙伴们可以自己去[官方网站](https://www.vmware.com)下载安装。
+VMware 可以去[官方网站](https://www.vmware.com)下载。本人使用的是 12.5.5 版本
+
+![](assets/markdown-img-paste-20200127152731106.png)
+
+![](assets/markdown-img-paste-20200127153501246.png)
+
+![](assets/markdown-img-paste-2020012715432596.png)
+
+![](assets/markdown-img-paste-20200127154959215.png)
+
+![](assets/markdown-img-paste-20200127155256330.png)
+
+![](assets/markdown-img-paste-2020012715541709.png)
+
+![](assets/markdown-img-paste-20200127155550193.png)
+
+![](assets/markdown-img-paste-20200127155958247.png)
+
+![](assets/markdown-img-paste-20200127160205828.png)
+
+![](assets/markdown-img-paste-2020012718520019.png)
+
+![](assets/markdown-img-paste-20200127175230439.png)
+
+![](assets/markdown-img-paste-20200127185814645.png)
+
+![](assets/markdown-img-paste-20200127190230683.png)
+
+![](assets/markdown-img-paste-20200127190935750.png)
 
 ## 下载 CentOS 7 镜像
 
