@@ -92,8 +92,13 @@ VMware 可以去[官方网站](https://www.vmware.com)下载。本人使用的�
 ![](assets/markdown-img-paste-20200116181509461.png)
 
 ![](assets/markdown-img-paste-2020011618161037.png)
+1
 
-![](assets/markdown-img-paste-20200116181831504.png)
+![](assets/markdown-img-paste-20200127194140734.png)
+
+![](assets/markdown-img-paste-20200127194253280.png)
+
+2
 
 ![](assets/markdown-img-paste-20200116182105829.png)
 
@@ -111,9 +116,18 @@ VMware 可以去[官方网站](https://www.vmware.com)下载。本人使用的�
 
 ![](assets/markdown-img-paste-20200116183519580.png)
 
+2
+
+
+![](assets/markdown-img-paste-20200201154410822.png)
+
+![](assets/markdown-img-paste-20200201154136732.png)
+
 ![](assets/markdown-img-paste-20200116183639985.png)
 
 ![](assets/markdown-img-paste-20200116183940855.png)
+
+![](assets/markdown-img-paste-20200201151028945.png)
 
 
 
