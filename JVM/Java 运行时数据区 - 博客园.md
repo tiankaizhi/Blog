@@ -11,13 +11,13 @@ JVM 在执行 Java 程序的过程中会把它所管理的内存划分为若干�
 运行时数据区在 HotSpot 1.8 之前的版本和 1.8 版本有所不同，主要是 **方法区移到元空间** 了。
 
 <div style="align:center">
-<img src="assets/markdown-img-paste-20200407160227151.png"/>
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180551559-1202824995.png"/>
 </div>
 
 <center>图 1-1：JDK1.8 之前 JVM 运行时数据区</center>
 
 <div style="align:center">
-<img src="assets/markdown-img-paste-20200407160758184.png"/>
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180645558-969822820.png"/>
 </div>
 
 <center>图 1-2：JDK1.8 JVM 运行时数据区</center>
@@ -52,7 +52,7 @@ JVM 在执行 Java 程序的过程中会把它所管理的内存划分为若干�
 
 #### 堆（HEAP）
 
-**堆是所有线程共享的一块区域**，作用就是存放对象。
+**堆是所有线程共享的一块区域**，主要用来存放对象和数组。
 
 在 Java 虚拟机规范中有描述：所有的对象实例和数组都要在堆上分配，但是 **随着 JIT（JUST-IN-TIME）编译器的发展与逃逸分析技术的逐渐成熟，并不是所有对象都只在堆上分配了**，比如：随着逃逸分析技术的逐渐成熟，在即时能被回收的对象也有可能会在虚拟机栈上分配。
 
@@ -85,7 +85,7 @@ JVM 在执行 Java 程序的过程中会把它所管理的内存划分为若干�
 这块区域在 1.7 之前原来是方法区的一部分，Class 文件中有一项信息是常量池（或者说是一张常量表，Class 文件以表存储数据）。
 
 <div style="align:center">
-<img src="assets/markdown-img-paste-2020040717433845.png"/>
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180747692-1963254778.png"/>
 </div>
 
 <center>图 1-3：Class 文件常量池</center>
@@ -124,17 +124,42 @@ Java 虚拟机包含的内容很多，本篇文章也只是对 Java 内存管理
 
 ## 公众号
 
-如果大家想要实时关注我更新的文章以及分享的干货的话，可以关注我的公众号 **<font color="#de2c58">我们都是小白鼠</font>**。公众号内有一些整理过的面试题、还有日常开发常用到的一些开发工具等，在公众号内回复【1024】即可获取。
+如果大家想要实时关注我更新的文章以及我分享的干货的话，可以关注我的公众号 **<font color="#de2c58">我们都是小白鼠</font>**。公众号内有一些整理过的 **<font color="#de2c58">原创精品脑图</font>**，不仅包含技术点的知识脉络，**<font color="#de2c58">更多的底层原理的梳理</font>**，目前涵盖 **Redis，RabbitMQ，Mysql，Java 虚拟机等** ，这些都是博主自己的学习笔记，整理的过程花费了很多心血，除此之外还有一些整理过的 **面试题** 以及日常开发常用到的一些 **开发工具** 等，在公众号内分别回复【技术脑图】、【面试题】、【开发工具】即可获取。
 
 <div style="align:center">
-<img src="https://img2020.cnblogs.com/blog/1326851/202003/1326851-20200327151848769-1614210938.png"/>
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409000524069-1865019753.png"/>
 </div>
 
+## 干货分享
 
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409102650976-1690108621.png"/>
+</div>
 
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409102738301-1928056403.png"/>
+</div>
 
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409102947878-1556180343.png"/>
+</div>
 
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409103034916-1930175751.png"/>
+</div>
 
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409103116226-1231995986.png"/>
+</div>
 
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409104121974-794920997.png"/>
+</div>
 
-1
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409104217094-1931434612.png"/>
+</div>
+
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200409104307473-733853523.png"/>
+</div>
