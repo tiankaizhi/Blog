@@ -10,11 +10,15 @@ JVM 在执行 Java 程序的过程中会把它所管理的内存划分为若干�
 
 运行时数据区在 HotSpot 1.8 之前的版本和 1.8 版本有所不同，主要是 **方法区移到元空间** 了。
 
-![](https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180551559-1202824995.png)
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180551559-1202824995.png"/>
+</div>
 
 <center>图 1-1：JDK1.8 之前 JVM 运行时数据区</center>
 
-![](https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180645558-969822820.png)
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180645558-969822820.png"/>
+</div>
 
 <center>图 1-2：JDK1.8 JVM 运行时数据区</center>
 
@@ -80,7 +84,10 @@ JVM 在执行 Java 程序的过程中会把它所管理的内存划分为若干�
 
 这块区域在 1.7 之前原来是方法区的一部分，Class 文件中有一项信息是常量池（或者说是一张常量表，Class 文件以表存储数据）。
 
-![](https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180747692-1963254778.png)
+
+<div style="align:center">
+<img src="https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200407180747692-1963254778.png"/>
+</div>
 
 <center>图 1-3：Class 文件常量池</center>
 
