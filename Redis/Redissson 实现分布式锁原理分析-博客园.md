@@ -1,4 +1,8 @@
-### 写在前面
+## 目录
+
+[TOC]
+
+## 写在前面
 
 在了解分布式锁具体实现方案之前，我们应该先思考一下使用分布式锁必须要考虑的一些问题。​
 
@@ -10,7 +14,7 @@
 
 + 锁的续期问题。
 
-### 常见的分布式锁实现方案
+## 常见的分布式锁实现方案
 
 + 基于 Redis 实现分布式锁
 
@@ -18,7 +22,7 @@
 
 本文采用第一种方案，也就是基于 Redis 的分布式锁实现方案。
 
-### Redis 实现分布式锁主要步骤
+## Redis 实现分布式锁主要步骤
 
 1. 指定一个 key 作为锁标记，存入 Redis 中，指定一个 **<font color="#de2c58">唯一的用户标识</font>** 作为 value。
 2. 当 key 不存在时才能设置值，确保同一时间只有一个客户端进程获得锁，满足 **<font color="#de2c58">互斥性</font>** 特性。
@@ -27,7 +31,7 @@
 
 > 特别注意：以上实现步骤考虑到了使用分布式锁需要考虑的互斥性、防死锁、加锁和解锁必须为同一个进程等问题，**<font color="#de2c58">但是锁的续期无法实现</font>**。所以，博主采用 Redisson 实现 Redis 的分布式锁，借助 **<font color="#de2c58">Redisson 的 WatchDog 机制</font>** 能够很好的解决锁续期的问题，同样 Redisson 也是 Redis 官方推荐分布式锁实现方案，实现起来较为简单。
 
-### Redisson 实现分布式锁
+## Redisson 实现分布式锁
 
 > 具体实现代码已经上传到博主的仓库，需要的朋友可以在公众号内回复 【分布式锁代码】 获取码云或 GitHub 项目下载地址。
 
@@ -37,6 +41,8 @@
 ### 加锁原理
 
 加锁其实是通过一段 lua 脚本实现的，如下：
+
+![](https://img2020.cnblogs.com/blog/1326851/202004/1326851-20200422134655804-106545566.png)
 
 ![](assets/markdown-img-paste-20200412151636332.png)
 
@@ -260,7 +266,6 @@ Watch Dog 机制其实就是一个后台定时任务线程，获取锁成功之�
 
 >注意：这里有一个细节问题，如果服务宕机了，Watch Dog 机制线程也就没有了，此时就不会延长 key 的过期时间，到了 30s 之后就会自动过期了，其他线程就可以获取到锁。
 
-
 ### 可重入加锁机制
 
 Redisson 也是支持可重入锁的，比如下面这种代码：
@@ -386,9 +391,7 @@ protected RFuture<Boolean> unlockInnerAsync(long threadId) {
 
 3. 取消 Watch Dog 机制，即将 ```RedissonLock.EXPIRATION_RENEWAL_MAP``` 里面的线程 id 删除，并且 cancel 掉 Netty 的那个定时任务线程。
 
-### 方案的优缺点
-
-### 优点
+## 方案优点
 
 1. Redisson 通过 Watch Dog 机制很好的解决了锁的续期问题。
 
@@ -398,18 +401,18 @@ protected RFuture<Boolean> unlockInnerAsync(long threadId) {
 
 4. 在等待申请锁资源的进程等待申请锁的实现上也做了一些优化，减少了无效的锁申请，提升了资源的利用率。
 
-### 缺点
+## 方案缺点
 
 1. 使用 Redisson 实现分布式锁方案最大的问题就是如果你对某个 Redis Master 实例完成了加锁，此时 Master 会异步复制给其对应的 slave 实例。但是这个过程中一旦 Master 宕机，主备切换，slave 变为了 Master。接着就会导致，客户端 2 来尝试加锁的时候，在新的 Master 上完成了加锁，而客户端 1 也以为自己成功加了锁，此时就会导致多个客户端对一个分布式锁完成了加锁，这时系统在业务语义上一定会出现问题，导致各种脏数据的产生。所以这个就是 Redis Cluster 或者说是 Redis Master-Slave 架构的主从异步复制导致的 Redis 分布式锁的最大缺陷（在 Redis Master 实例宕机的时候，可能导致多个客户端同时完成加锁）。
 
 2. 有个别观点说使用 Watch Dog 机制开启一个定时线程去不断延长锁的时间对系统有所损耗（这里只是网络上的一种说法，博主查了很多资料并且结合实际生产并不认为有很大系统损耗，这个仅供大家参考）。
 
 
-### 总结
+## 总结
 
 以上就是基于 Redis 使用 Redisson 实现分布式锁的所有原理分析，希望可以帮助小伙伴们对分布式锁的理解有所加深。其实分析完源码后发现基于 Redis 自己手动实现一个简版的分布式锁工具也并不是很难，有兴趣的小伙伴可以试试。
 
-### 参考
+## 参考
 
 + https://juejin.im/post/5e828328f265da47cd355a5d#heading-6
 + https://juejin.im/post/5e1977dd6fb9a02fbb76e8eb#heading-0
@@ -417,14 +420,11 @@ protected RFuture<Boolean> unlockInnerAsync(long threadId) {
 + https://www.cnblogs.com/qdhxhz/p/11046905.html
 
 
-### 最后
+## 最后
 
-欢迎大家关注我的关注我的公众号，一起探讨研究技术。
+欢迎大家关注我的关注我的公众号一起探讨研究技术。
 
-
-
-
-
+![](https://img2020.cnblogs.com/blog/1326851/202003/1326851-20200307235900287-613114059.png)
 
 
 
