@@ -1,3 +1,7 @@
+## 写在前面
+
+文章涉及到的 customer 表来源于案例库 sakila，下载地址为 http://downloads.mysql.com/docs/sakila-db.zip
+
 ## MySQL 排序方式
 
 + 通过索引顺序扫描直接返回有序数据
@@ -6,7 +10,9 @@
 
 所有不是通过索引直接返回排序结果的排序都叫 FileSort 排序。FileSort 并不代表通过磁盘文件进行排序，而只是说进行了一个排序操作，至于排序操作是否使用了磁盘文件或临时表取决于 MySQL 服务器对排序参数的设置和需要排序数据的大小。
 
-表 customer DDL
+## EXPLAIN 排序分析
+
+customer DDL
 
 ```sql
 CREATE TABLE `customer` (
@@ -28,7 +34,7 @@ CREATE TABLE `customer` (
   CONSTRAINT `fk_customer_store` FOREIGN KEY (`store_id`) REFERENCES `store` (`store_id`) ON DELETE RESTRICT ON UPDATE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=600 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-CREATE DEFINER=`root`@`%` TRIGGER `customer_create_date` BEFORE INSERT ON `customer` FOR EACH ROW SET NEW.create_date = NOW();;
+CREATE DEFINER=`root`@`%` TRIGGER `customer_create_date` BEFORE INSERT ON `customer` FOR EACH ROW SET NEW.create_date = NOW();
 ```
 
 ---
@@ -113,6 +119,13 @@ EXPLAIN SELECT store_id , email FROM customer WHERE store_id  >= 1 AND store_id 
 
 ---
 
+### ORDER BY 可能出现 FileSort 的几种情况：
+1. order by 字段混用 ASC 和 DESC 排序方式。
+2. SELECT * 时，如果 order by 排序字段不是主键可能导致 FileSort。
+3. 联合索引情况下，order by 多字段排序的字段左右顺序和联合索引的字段左右顺序不一致导致 FileSort。
+4. 联合索引情况下，where 字段和 order by 字段的左右顺序和联合索引字段左右顺序或者 where 字段出现范围查询都可能导致 FileSort。
+
+
 ## FileSort 优化
 
 通过创建合适的索引可以减少 FileSort 的出现，但是对于某些情况下，条件限制不能让 FileSort 彻底消失，那就需要对 FileSort 进行优化。对于 FileSort，MySQL 有两种排序算法。
@@ -126,3 +139,15 @@ MySQL 通过比较系统变量 max_length_for_sort_data 的大小和 Query 语�
 适当加大 sort_buffer_size 排序区，尽量让排序在内存中完成，而不是通过创建临时表放在文件中进行；当然也不能无限加大 sort_buffer_size 排序区，因为 sort_buffer_size 参数是每个线程独占的，设置过大会导致服务器 SWAP 严重，要考虑数据库活动连接数和服务器内存的大小来适当设置排序区。
 
 尽量只使用必要的字段，SELECT 具体的字段名称，而不是 SELECT * 选择所有字段，这样可以减少排序区的使用，提高 SQL 性能。
+
+#### 参考
+
+《深入浅出 MySQL 数据库开发、优化与管理维护第 2 版》
+
+《MySQL 实战 45 讲》
+
+## 最后
+
+如果大家想要实时关注我更新的文章以及我分享的干货的话，可以关注我的公众号 **<font color="#de2c58">我们都是小白鼠</font>**。
+
+![](https://img2020.cnblogs.com/blog/1326851/202003/1326851-20200307235900287-613114059.png)
