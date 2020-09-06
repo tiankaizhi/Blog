@@ -1,6 +1,6 @@
 ## 下载并安装 VMware
 
-访问 VMware [官方网站](https://www.vmware.com)下载安装包程序。博主使用的是 **12.5.5** 版本，下载完之后点击安装包程序进入安装向导，然后点击“下一步”。
+访问 VMware [官方网站](https://www.vmware.com)下载安装包程序。博主使用的是 ```12.5.5``` 版本，下载完之后点击安装包程序进入安装向导，然后点击“下一步”。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200127153248560-392809417.png)
 
@@ -10,8 +10,6 @@
 
 选择安装位置和增强型键盘驱动程序。
 
-> 小贴士:
->
 > 增强型虚拟键盘功能可更好地处理国际键盘和带有额外按键的键盘，此功能只能在 Windows 主机系统中使用。详细介绍可以参考官方使用手册。
 
 ![](https://img2018.cnblogs.com/blog/1326851/202001/1326851-20200127154343283-1616769571.png)
@@ -67,13 +65,13 @@ CentOS 系统可以去[官方网站](http://isoredirect.centos.org/centos/7/isos
 
 CentOS 一共分为 6 个版本，各版本介绍如下：
 
-> CentOS-7-x86_64-DVD-1908 &emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;&nbsp;标准安装版（推荐）
+> CentOS-7-x86_64-DVD-1908 &emsp;&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;标准安装版（推荐）
 >
 > CentOS-7-x86_64-Everything-1908 &emsp;&emsp;&emsp;完整版，集成所有软件（以用来补充系统的软件或者填充本地镜像）
 >
-> CentOS-7-x86_64-LiveGNOME-1908 &emsp;&emsp;&nbsp;GNOME 桌面版
+> CentOS-7-x86_64-LiveGNOME-1908 &emsp;&emsp;GNOME 桌面版
 >
-> CentOS-7-x86_64-LiveKDE-1908&emsp;&emsp;&emsp;&emsp;&nbsp;&nbsp;KDE 桌面版  
+> CentOS-7-x86_64-LiveKDE-1908&emsp;&emsp;&emsp;&emsp;&nbsp;KDE 桌面版  
 >
 > CentOS-7-x86_64-Minimal-1908 &emsp;&emsp;&emsp;&emsp;&nbsp;精简版（自带的软件最少）
 >
