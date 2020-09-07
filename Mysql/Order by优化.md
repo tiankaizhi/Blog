@@ -179,4 +179,4 @@ MySQL 通过 ```max_length_for_sort_data``` 的大小单行所有列的总大小
 
 《深入浅出 MySQL 数据库开发、优化与管理维护第 2 版》
 
-《MySQL 实战 45 讲》
+《极客时间· MySQL 实战 45 讲》
