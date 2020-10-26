@@ -1,13 +1,21 @@
 
-## SPI
+## 前言
 
 在聊 Dubbo 的 SPI 之前，对 SPI 机制还不是很了解的小伙伴可以先简单了解一下 JDK 的 SPI 机制。
+
+在 Dubbo 中，SPI 是一个非常重要的模块，贯穿整个 Dubbo 框架，以下模块的扩展都是基于 SPI 机制实现的。其实 SPI 用一句话概括就是在程序运行时，动态为接口根据条件生成对应的实现类。
+
+![](assets/markdown-img-paste-20201026175429576.png)
+
+![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180143277-2109837406.png)
 
 Dubbo 并未使用 Java SPI，而是重新实现了一套功能更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ExtensionLoader 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 META-INF/dubbo 路径下，配置内容如下。
 
 ## Dubbo SPI 示例
 
 ![](assets/markdown-img-paste-20201026155858511.png)
+
+![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180222454-1752089915.png)
 
 接口
 ```Java
