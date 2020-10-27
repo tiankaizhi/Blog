@@ -9,6 +9,13 @@
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180143277-2109837406.png)
 
+## 文章脉络
+
+本篇文章按照先后顺序包含以下几个模块：
+
+1. Dubbo SPI 使用案例
+2. Dubbo SPI 源码分析
+
 Dubbo 并未使用 Java SPI，而是重新实现了一套功能更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ExtensionLoader 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 META-INF/dubbo 路径下，配置内容如下。
 
 ## Dubbo SPI 示例
@@ -16,6 +23,10 @@ Dubbo 并未使用 Java SPI，而是重新实现了一套功能更强的 SPI 机
 ![](assets/markdown-img-paste-20201026155858511.png)
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180222454-1752089915.png)
+
+> 注意，下面的案例来源于 Dubbo 框架 dubbo-common 模块的改造，读者也可以参看 Dubbo 源代码部分
+
+![](assets/markdown-img-paste-20201027141249844.png)
 
 接口
 ```Java
@@ -101,7 +112,15 @@ Ext1Impl1-echo
 Ext1Impl2-echo
 ```
 
-接下来对 Dubbo SPI 机制进行源码分析，在源码分析的过程中会对提到 Dubbo 相对于 JDK SPI 方式的优点的地方，希望能加深两种 SPI 方式的理解
+## Dubbo SPI 源码分析
+
+接下来对 Dubbo SPI 机制进行源码分析，在源码分析的过程中会对提到 **Dubbo 相对于 JDK SPI 方式的优点在哪里**，希望能加深小伙伴们对两种 SPI 方式的理解
+
+> 注意，本文源码分析基于 dubbo 2.6.x 版本
+
+**Dubbo SPI 源代码目录：**
+
+![](assets/markdown-img-paste-20201027140427255.png)
 
 ```Java
 public T getExtension(String name) {
@@ -135,7 +154,7 @@ public T getExtension(String name) {
 
 ```Java
 private T createExtension(String name) {
-    // 从配置文件中加载所有的拓展类，可得到“配置项名称”到“配置类”的映射关系表
+    // 从配置文件中加载所有的拓展类缓存到 cachedClasses，并取出 name 对应的 Class
     Class<?> clazz = getExtensionClasses().get(name); // @1
     if (clazz == null) {
         throw findException(name);
@@ -166,16 +185,19 @@ private T createExtension(String name) {
 }
 ```
 
-createExtension() 方法的逻辑稍复杂一下，包含了如下的步骤：
+```createExtension()``` 方法的逻辑稍复杂一下，包含了如下的步骤：
 
-1. 通过 getExtensionClasses() 获取所有的拓展类
-2. 通过反射创建拓展对象
-3. 向拓展对象中注入依赖
-4. 将拓展对象包裹在相应的 Wrapper 对象中
+1. 通过 ```getExtensionClasses()``` 获取所有的拓展类缓存到
+```Java
+private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<Map<String, Class<?>>>();
+```
+2. 通过反射 ```clazz.newInstance();``` 创建拓展对象
+3. ```injectExtension(instance);``` 向拓展对象中注入依赖
+4. 将拓展对象包裹在相应的 Wrapper 对象中，返回 Wrapper 对象
 
 以上步骤中，第一个步骤是加载拓展类的关键，第三和第四个步骤是 Dubbo IOC 与 AOP 的具体实现。在接下来的章节中，将会重点分析 getExtensionClasses() 方法的逻辑，以及简单介绍 Dubbo IOC 的具体实现。
 
-## 获取所有的拓展类
+### 获取所有的拓展类
 
 我们在通过名称获取拓展类之前，首先需要根据配置文件解析出拓展项名称到拓展类的映射关系表（Map<名称, 拓展类>），之后再根据拓展项名称从映射关系表中取出相应的拓展类即可。相关过程的代码分析如下：
 
@@ -198,11 +220,11 @@ private Map<String, Class<?>> getExtensionClasses() {
 }
 ```
 
-这里也是先检查缓存，若缓存未命中，则通过 loadExtensionClasses 加载拓展类。下面分析 loadExtensionClasses 方法的逻辑。
+这里也是先检查缓存，若缓存未命中，则通过 ```loadExtensionClasses()``` 加载拓展类。下面进行详细分析
 
 ```Java
 private Map<String, Class<?>> loadExtensionClasses() {
-    // 获取 SPI 注解，这里的 type 变量是在调用 getExtensionLoader 方法时传入的
+    // 获取 SPI 注解
     final SPI defaultAnnotation = type.getAnnotation(SPI.class);
     if (defaultAnnotation != null) {
         String value = defaultAnnotation.value();
@@ -230,7 +252,7 @@ private Map<String, Class<?>> loadExtensionClasses() {
 }
 ```
 
-loadExtensionClasses 方法总共做了两件事情，一是对 SPI 注解进行解析，二是调用 loadDirectory 方法加载 **指定文件夹** 配置文件。SPI 注解解析过程比较简单，无需多说。loadDirectory 也不再赘述。
+```loadExtensionClasses()``` 方法总共做了两件事情，一是对 SPI 注解进行解析，二是调用 ```loadDirectory()``` 方法加载 **指定文件夹** 配置文件。
 
 到这里 interface 所有的扩展类 class 都生成完毕，并且以 Map 的形式都缓存到
 ```Java
@@ -244,9 +266,9 @@ private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new C
 ```
 里面。
 
-@3 步就是 Dubbo 的自动注入部分，也就是 Dubbo 的 IOC 容器部分，将上一步生成的 instance 实例所需的属性注入进去
+@3 步就是 Dubbo 的自动注入部分，也就是 Dubbo 的 IOC 容器部分，注入上一步生成的 instance 实例所需的属性。
 
-Dubbo IOC 是通过 setter 方法注入依赖。Dubbo 首先会通过反射获取到实例的所有方法，然后再遍历方法列表，检测方法名是否具有 setter 方法特征。若有，则通过 ObjectFactory 获取依赖对象，最后通过反射调用 setter 方法将依赖设置到目标对象中。整个过程对应的代码如下：
+Dubbo IOC 是通过 ```setter()``` 方法注入依赖。Dubbo 首先会通过反射获取到实例的所有方法，然后再遍历方法列表，检测方法名是否具有 setter 方法特征。若有，则通过 ObjectFactory 获取依赖对象，最后通过反射调用 setter 方法将依赖设置到目标对象中。整个过程对应的代码如下：
 
 ```Java
 private T injectExtension(T instance) {
@@ -266,7 +288,7 @@ private T injectExtension(T instance) {
                             method.getName().substring(3, 4).toLowerCase() +
                             	method.getName().substring(4) : "";
                         // 从 ObjectFactory 中获取依赖对象
-                        Object object = objectFactory.getExtension(pt, property);
+                        Object object = objectFactory.getExtension(pt, property); // @4 根据属性名称和属性对象 Class 类型获取该属性对象
                         if (object != null) {
                             // 通过反射调用 setter 方法设置依赖
                             method.invoke(instance, object);
@@ -284,12 +306,60 @@ private T injectExtension(T instance) {
 }
 ```
 
-在上面代码中，objectFactory 变量的类型为 AdaptiveExtensionFactory，AdaptiveExtensionFactory 内部维护了一个 ExtensionFactory 列表，用于存储其他类型的 ExtensionFactory。Dubbo 目前提供了两种 ExtensionFactory，分别是 SpiExtensionFactory 和 SpringExtensionFactory。前者用于创建自适应的拓展，后者是用于从 Spring 的 IOC 容器中获取所需的拓展。这两个类的类的代码不是很复杂，这里就不一一分析了。
+根据对象名称和 Class 类型获取对象
+```Java
+private ExtensionLoader(Class<?> type) {
+    this.type = type;
+    objectFactory = (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
+}
+```
+
+**ExtensionFactory** 实现类：
+
+![](assets/markdown-img-paste-20201027104405456.png)
+![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027105458363-678830056.png)
+
+```Java
+@Adaptive
+public class AdaptiveExtensionFactory implements ExtensionFactory {
+
+    private final List<ExtensionFactory> factories; // @5
+
+    public AdaptiveExtensionFactory() {
+        ExtensionLoader<ExtensionFactory> loader = ExtensionLoader.getExtensionLoader(ExtensionFactory.class);
+        List<ExtensionFactory> list = new ArrayList<ExtensionFactory>();
+        for (String name : loader.getSupportedExtensions()) {  //@6
+            list.add(loader.getExtension(name));
+        }
+        factories = Collections.unmodifiableList(list);
+    }
+
+    @Override
+    public <T> T getExtension(Class<T> type, String name) {  // @7
+        for (ExtensionFactory factory : factories) {
+            T extension = factory.getExtension(type, name);
+            if (extension != null) {
+                return extension;
+            }
+        }
+        return null;
+    }
+
+}
+```
+
+```Java
+public Set<String> getSupportedExtensions() {
+    // 获取所有的 Class
+    Map<String, Class<?>> clazzes = getExtensionClasses();
+    return Collections.unmodifiableSet(new TreeSet<String>(clazzes.keySet()));
+}
+```
+
+在 @4 处，```objectFactory``` 变量的类型为 ```AdaptiveExtensionFactory```，AdaptiveExtensionFactory 内部维护了一个 ExtensionFactory 列表，用于 ExtensionFactory 所有的实现。Dubbo 目前提供了两种 ExtensionFactory，分别是 ```SpiExtensionFactory``` 和 ```SpringExtensionFactory```，前者用于创建自适应的拓展，后者是用于从 Spring 的 IOC 容器中获取所需的拓展。而 AdaptiveExtensionFactory 中的 ```factories``` 通过代码 @6 处持有所有的 ExtensionFactory 实现，变成一个列表。所以代码 @4 最终获取注入的属性对象最终就会走 @7 ，然后走 SpiExtensionFactory 和 SpringExtensionFactory 轮流获取，只要获取到就立即返回。
 
 Dubbo IOC 目前仅支持 setter 方式注入，总的来说，逻辑比较简单易懂。
 
 ## 总结
 
-本篇文章简单分别介绍了 Java SPI 与 Dubbo SPI 用法，并对 Dubbo SPI 的加载拓展类的过程进行了分析。另外，在 Dubbo SPI 中还有一块重要的逻辑这里没有进行分析，即 Dubbo SPI 的扩展点自适应机制。该机制的逻辑较为复杂，我们将会在下一篇文章中进行详细的分析。
-
-好了，本篇文章就先到这里了。如果文章中有错误不妥之处，欢迎大家提 issue 进行反馈，或者提 pull request 进行修正。让我们携手共建 Dubbo 社区。
+本篇文章简单分别介绍了 Dubbo SPI 用法，并对 Dubbo SPI 的加载拓展类的过程进行了分析。另外，在 Dubbo SPI 中还有一块重要的逻辑这里没有进行分析，即 **Dubbo SPI 的扩展点自适应机制**。该机制的逻辑较为复杂，我们将会在下一篇文章中进行详细的分析。
