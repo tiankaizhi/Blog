@@ -1,365 +1,338 @@
-
 ## 前言
 
-在聊 Dubbo 的 SPI 之前，对 SPI 机制还不是很了解的小伙伴可以先简单了解一下 JDK 的 SPI 机制。
+## 扩展点自适应 @Adaptive 注解与适配器
 
-在 Dubbo 中，SPI 是一个非常重要的模块，贯穿整个 Dubbo 框架，以下模块的扩展都是基于 SPI 机制实现的。其实 SPI 用一句话概括就是在程序运行时，动态为接口根据条件生成对应的实现类。
+@Adaptive 注解用来实现 Dubbo 的适配器功能，那什么是适配器呢？这里我们通过一个示例进行说明。Dubbo 中的 ExtensionFactory 接口有三个实现类，如下图所示，ExtensionFactory 接口上有 @SPI 注解，AdaptiveExtensionFactory 实现类上有 @Adaptive 注解。
 
-![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180143277-2109837406.png)
+@Adaptive 注解可以表示在类，接口，枚举和方法上，但是在整个Dubbo框架中，只有几个地方使用到了类级别上。其他都标注在方法上。如果标注在方法上，为方法级别注解，则可以通过参数动态获取实现类，这一点在自适应特性中已经说明。方法级别注解，在第一次getExtension时，会自动生成和编译一个动态的Adaptive类，从而达到动态实现类的效果。
+例如：Protocol接口在export和refer两个接口上添加了@Adaptive注解。Dubbo在初始化扩展点时，会生成Protocol$Adaptive类，里面会实现两个方法，方法里会有一些抽象的通用逻辑，通过@Adaptive中传入的参数，找到并调用真正的实现类。和装饰器模式比较类似。
 
-## 文章脉络
-
-本篇文章按照先后顺序包含以下几个模块：
-
-1. Dubbo SPI 使用案例
-2. Dubbo SPI 源码分析
-3. Dubbo SPI 大致流程图
-
-Dubbo 并未使用 Java SPI，而是重新实现了一套功能更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ExtensionLoader 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 META-INF/dubbo 路径下，配置内容如下。
-
-## Dubbo SPI 示例
-
-![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180222454-1752089915.png)
-
-> 注意，下面的案例来源于 Dubbo 框架 dubbo-common 模块的改造，读者也可以参看 Dubbo 源代码部分
-
-![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153602839-2102413431.png)
-
-接口
-```Java
-@SPI
+```java
+@SPI("impl1")
 public interface SimpleExt {
-    // @Adaptive example, do not specify a explicit key.
-
     String echo(URL url, String s);
-
-
-    String yell(URL url, String s);
-
-    // no @Adaptive
-    String bang(URL url, int i);
 }
 ```
 
-实现类一
-```Java
+```java
 public class SimpleExtImpl1 implements SimpleExt {
     public String echo(URL url, String s) {
         return "Ext1Impl1-echo";
     }
-
-    public String yell(URL url, String s) {
-        return "Ext1Impl1-yell";
-    }
-
-    public String bang(URL url, int i) {
-        return "bang1";
-    }
 }
 ```
 
-实现类二
-```Java
+```java
 public class SimpleExtImpl2 implements SimpleExt {
     public String echo(URL url, String s) {
         return "Ext1Impl2-echo";
     }
-
-    public String yell(URL url, String s) {
-        return "Ext1Impl2-yell";
-    }
-
-    public String bang(URL url, int i) {
-        return "bang2";
-    }
-
 }
 ```
 
-实现类三
-```Java
+```java
 public class SimpleExtImpl3 implements SimpleExt {
     public String echo(URL url, String s) {
         return "Ext1Impl3-echo";
     }
-
-    public String yell(URL url, String s) {
-        return "Ext1Impl3-yell";
-    }
-
-    public String bang(URL url, int i) {
-        return "bang3";
-    }
-
 }
 ```
 
-测试用例：
-```Java
+```java
 @Test
-public void test_getExtension() throws Exception {
-    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl1").echo(new URL("","",9001),""));
-    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl2").echo(new URL("","",9001),""));
-}
-```
+public void test_getAdaptiveExtension_defaultAdaptiveKey() throws Exception {
+    {
+        SimpleExt ext = ExtensionLoader.getExtensionLoader(SimpleExt.class).getAdaptiveExtension();
 
-测试结果：
-```
-Ext1Impl1-echo
-Ext1Impl2-echo
-```
+        Map<String, String> map = new HashMap<String, String>();
+        URL url = new URL("p1", "1.2.3.4", 1010, "path1", map);
 
-## Dubbo SPI 源码分析
-
-接下来对 Dubbo SPI 机制进行源码分析，在源码分析的过程中会对提到 **Dubbo 相对于 JDK SPI 方式的优点在哪里**，希望能加深小伙伴们对两种 SPI 方式的理解
-
-> 注意，本文源码分析基于 dubbo 2.6.x 版本
-
-**Dubbo SPI 源代码目录：**
-
-![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153637776-732718319.png)
-
-```Java
-public T getExtension(String name) {
-    if (name == null || name.length() == 0)
-        throw new IllegalArgumentException("Extension name == null");
-    if ("true".equals(name)) {
-        // 获取默认的拓展实现类
-        return getDefaultExtension();
-    }
-    // Holder，顾名思义，用于持有目标对象
-    Holder<Object> holder = cachedInstances.get(name);
-    if (holder == null) {
-        cachedInstances.putIfAbsent(name, new Holder<Object>());
-        holder = cachedInstances.get(name);
-    }
-    Object instance = holder.get();
-    if (instance == null) {
-        synchronized (holder) {
-            instance = holder.get();
-            if (instance == null) {
-                // 创建拓展实例
-                instance = createExtension(name);
-                // 设置实例到 holder 中
-                holder.set(instance);
-            }
-        }
-    }
-    return (T) instance;
-}
-```
-
-```Java
-private T createExtension(String name) {
-    // 从配置文件中加载所有的拓展类缓存到 cachedClasses，并取出 name 对应的 Class
-    Class<?> clazz = getExtensionClasses().get(name); // @1
-    if (clazz == null) {
-        throw findException(name);
-    }
-    try {
-        T instance = (T) EXTENSION_INSTANCES.get(clazz);
-        if (instance == null) {
-            // 通过反射创建实例
-            EXTENSION_INSTANCES.putIfAbsent(clazz, clazz.newInstance());  //@2
-            instance = (T) EXTENSION_INSTANCES.get(clazz);
-        }
-        // 向实例中注入依赖
-        injectExtension(instance); // @3
-        Set<Class<?>> wrapperClasses = cachedWrapperClasses;
-        if (wrapperClasses != null && !wrapperClasses.isEmpty()) {
-            // 循环创建 Wrapper 实例
-            for (Class<?> wrapperClass : wrapperClasses) {
-                // 将当前 instance 作为参数传给 Wrapper 的构造方法，并通过反射创建 Wrapper 实例。
-                // 然后向 Wrapper 实例中注入依赖，最后将 Wrapper 实例再次赋值给 instance 变量
-                instance = injectExtension(
-                    (T) wrapperClass.getConstructor(type).newInstance(instance));
-            }
-        }
-        return instance;
-    } catch (Throwable t) {
-        throw new IllegalStateException("...");
+        String echo = ext.echo(url, "haha");
+        System.out.println(echo);
     }
 }
 ```
 
-```createExtension()``` 方法的逻辑稍复杂一下，包含了如下的步骤：
+测试结果报错：
 
-1. 通过 ```getExtensionClasses()``` 获取所有的拓展类缓存到
-```Java
-private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<Map<String, Class<?>>>();
+```java
+java.lang.IllegalStateException: fail to create adaptive instance: java.lang.IllegalStateException: Can not create adaptive extension interface com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt, cause: No adaptive method on extension com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt, refuse to create the adaptive class!
+
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.getAdaptiveExtension(ExtensionLoader.java:448)
+	at com.alibaba.dubbo.common.extensionloader.ExtensionLoader_Adaptive_Test.test_getAdaptiveExtension_defaultAdaptiveKey(ExtensionLoader_Adaptive_Test.java:59)
+	at sun.reflect.NativeMethodAccessorImpl.invoke0(Native Method)
+	at sun.reflect.NativeMethodAccessorImpl.invoke(NativeMethodAccessorImpl.java:62)
+	at sun.reflect.DelegatingMethodAccessorImpl.invoke(DelegatingMethodAccessorImpl.java:43)
+	at java.lang.reflect.Method.invoke(Method.java:498)
+	at org.junit.runners.model.FrameworkMethod$1.runReflectiveCall(FrameworkMethod.java:50)
+	at org.junit.internal.runners.model.ReflectiveCallable.run(ReflectiveCallable.java:12)
+	at org.junit.runners.model.FrameworkMethod.invokeExplosively(FrameworkMethod.java:47)
+	at org.junit.internal.runners.statements.InvokeMethod.evaluate(InvokeMethod.java:17)
+	at org.junit.runners.ParentRunner.runLeaf(ParentRunner.java:325)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:78)
+	at org.junit.runners.BlockJUnit4ClassRunner.runChild(BlockJUnit4ClassRunner.java:57)
+	at org.junit.runners.ParentRunner$3.run(ParentRunner.java:290)
+	at org.junit.runners.ParentRunner$1.schedule(ParentRunner.java:71)
+	at org.junit.runners.ParentRunner.runChildren(ParentRunner.java:288)
+	at org.junit.runners.ParentRunner.access$000(ParentRunner.java:58)
+	at org.junit.runners.ParentRunner$2.evaluate(ParentRunner.java:268)
+	at org.junit.runners.ParentRunner.run(ParentRunner.java:363)
+	at org.junit.runner.JUnitCore.run(JUnitCore.java:137)
+	at com.intellij.junit4.JUnit4IdeaTestRunner.startRunnerWithArgs(JUnit4IdeaTestRunner.java:68)
+	at com.intellij.rt.junit.IdeaTestRunner$Repeater.startRunnerWithArgs(IdeaTestRunner.java:33)
+	at com.intellij.rt.junit.JUnitStarter.prepareStreamsAndStart(JUnitStarter.java:230)
+	at com.intellij.rt.junit.JUnitStarter.main(JUnitStarter.java:58)
+Caused by: java.lang.IllegalStateException: Can not create adaptive extension interface com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt, cause: No adaptive method on extension com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt, refuse to create the adaptive class!
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.createAdaptiveExtension(ExtensionLoader.java:725)
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.getAdaptiveExtension(ExtensionLoader.java:444)
+	... 23 more
+Caused by: java.lang.IllegalStateException: No adaptive method on extension com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt, refuse to create the adaptive class!
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.createAdaptiveExtensionClassCode(ExtensionLoader.java:756)
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.createAdaptiveExtensionClass(ExtensionLoader.java:738)
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.getAdaptiveExtensionClass(ExtensionLoader.java:734)
+	at com.alibaba.dubbo.common.extension.ExtensionLoader.createAdaptiveExtension(ExtensionLoader.java:723)
+	... 24 more
 ```
-2. 通过反射 ```clazz.newInstance();``` 创建拓展对象。**注意，这里就能看出来和 JDK 默认的 SPI 的区别，这里是实例化所需要的扩展实例。**
-3. ```injectExtension(instance);``` 向拓展对象中注入依赖
-4. 将拓展对象包裹在相应的 Wrapper 对象中，返回 Wrapper 对象
 
-以上步骤中，第一个步骤是加载拓展类的关键，第三和第四个步骤是 Dubbo IOC 与 AOP 的具体实现。在接下来的章节中，将会重点分析 getExtensionClasses() 方法的逻辑，以及简单介绍 Dubbo IOC 的具体实现。
+getAdaptiveExtension() 作为入口 --> createAdaptiveExtension() --> getAdaptiveExtensionClass() -- > createAdaptiveExtensionClassCode()
 
-### 获取所有的拓展类
-
-我们在通过名称获取拓展类之前，首先需要根据配置文件解析出拓展项名称到拓展类的映射关系表（Map<名称, 拓展类>），之后再根据拓展项名称从映射关系表中取出相应的拓展类即可。相关过程的代码分析如下：
-
-```Java
-private Map<String, Class<?>> getExtensionClasses() {
-    // 从缓存中获取已加载的拓展类
-    Map<String, Class<?>> classes = cachedClasses.get();
-    // 双重检查
-    if (classes == null) {
-        synchronized (cachedClasses) {
-            classes = cachedClasses.get();
-            if (classes == null) {
-                // 加载拓展类
-                classes = loadExtensionClasses();
-                cachedClasses.set(classes);
-            }
-        }
-    }
-    return classes;
+```java
+private Class<?> createAdaptiveExtensionClass() {
+    String code = createAdaptiveExtensionClassCode();
+    ClassLoader classLoader = findClassLoader();
+    com.alibaba.dubbo.common.compiler.Compiler compiler = ExtensionLoader.getExtensionLoader(com.alibaba.dubbo.common.compiler.Compiler.class).getAdaptiveExtension();
+    return compiler.compile(code, classLoader);
 }
 ```
 
-这里也是先检查缓存，若缓存未命中，则通过 ```loadExtensionClasses()``` 加载拓展类。下面进行详细分析
-
-```Java
-private Map<String, Class<?>> loadExtensionClasses() {
-    // 获取 SPI 注解
-    final SPI defaultAnnotation = type.getAnnotation(SPI.class);
-    if (defaultAnnotation != null) {
-        String value = defaultAnnotation.value();
-        if ((value = value.trim()).length() > 0) {
-            // 对 SPI 注解内容进行切分
-            String[] names = NAME_SEPARATOR.split(value);
-            // 检测 SPI 注解内容是否合法，不合法则抛出异常
-            if (names.length > 1) {
-                throw new IllegalStateException("more than 1 default extension name on extension...");
-            }
-
-            // 设置默认名称，参考 getDefaultExtension 方法
-            if (names.length == 1) {
-                cachedDefaultName = names[0];
+```java
+private String createAdaptiveExtensionClassCode() {
+        StringBuilder codeBuilder = new StringBuilder();
+        Method[] methods = type.getMethods();
+        boolean hasAdaptiveAnnotation = false;
+        for (Method m : methods) {
+            if (m.isAnnotationPresent(Adaptive.class)) {
+                hasAdaptiveAnnotation = true;
+                break;
             }
         }
-    }
+        // no need to generate adaptive class since there's no adaptive method found.
+        if (!hasAdaptiveAnnotation)
+            throw new IllegalStateException("No adaptive method on extension " + type.getName() + ", refuse to create the adaptive class!");
 
-    Map<String, Class<?>> extensionClasses = new HashMap<String, Class<?>>();
-    // 加载指定文件夹下的配置文件
-    loadDirectory(extensionClasses, DUBBO_INTERNAL_DIRECTORY);
-    loadDirectory(extensionClasses, DUBBO_DIRECTORY);
-    loadDirectory(extensionClasses, SERVICES_DIRECTORY);
-    return extensionClasses;
-}
-```
+        codeBuilder.append("package ").append(type.getPackage().getName()).append(";");
+        codeBuilder.append("\nimport ").append(ExtensionLoader.class.getName()).append(";");
+        codeBuilder.append("\npublic class ").append(type.getSimpleName()).append("$Adaptive").append(" implements ").append(type.getCanonicalName()).append(" {");
 
-```loadExtensionClasses()``` 方法总共做了两件事情，一是对 SPI 注解进行解析，二是调用 ```loadDirectory()``` 方法加载 **指定文件夹** 配置文件。
+        for (Method method : methods) {
+            Class<?> rt = method.getReturnType();
+            Class<?>[] pts = method.getParameterTypes();
+            Class<?>[] ets = method.getExceptionTypes();
 
-到这里 interface 所有的扩展类 class 都生成完毕，并且以 Map 的形式都缓存到
-```Java
-private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<Map<String, Class<?>>>();
-```
-中，其中 Map 的 key 是 配置文件中 key 部分，value 部分则是具体实现类的 Class 对象。
-
-@2 步根据 Class 对象创建了一个对象，并将其缓存到
-```Java
-private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new ConcurrentHashMap<Class<?>, Object>();
-```
-里面。
-
-@3 步就是 Dubbo 的自动注入部分，也就是 Dubbo 的 IOC 容器部分，注入上一步生成的 instance 实例所需的属性。
-
-Dubbo IOC 是通过 ```setter()``` 方法注入依赖。Dubbo 首先会通过反射获取到实例的所有方法，然后再遍历方法列表，检测方法名是否具有 setter 方法特征。若有，则通过 ObjectFactory 获取依赖对象，最后通过反射调用 setter 方法将依赖设置到目标对象中。整个过程对应的代码如下：
-
-```Java
-private T injectExtension(T instance) {
-    try {
-        if (objectFactory != null) {
-            // 遍历目标类的所有方法
-            for (Method method : instance.getClass().getMethods()) {
-                // 检测方法是否以 set 开头，且方法仅有一个参数，且方法访问级别为 public
-                if (method.getName().startsWith("set")
-                    && method.getParameterTypes().length == 1
-                    && Modifier.isPublic(method.getModifiers())) {
-                    // 获取 setter 方法参数类型
-                    Class<?> pt = method.getParameterTypes()[0];
-                    try {
-                        // 获取属性名，比如 setName 方法对应属性名 name
-                        String property = method.getName().length() > 3 ?
-                            method.getName().substring(3, 4).toLowerCase() +
-                            	method.getName().substring(4) : "";
-                        // 从 ObjectFactory 中获取依赖对象
-                        Object object = objectFactory.getExtension(pt, property); // @4 根据属性名称和属性对象 Class 类型获取该属性对象
-                        if (object != null) {
-                            // 通过反射调用 setter 方法设置依赖
-                            method.invoke(instance, object);
-                        }
-                    } catch (Exception e) {
-                        logger.error("fail to inject via method...");
+            Adaptive adaptiveAnnotation = method.getAnnotation(Adaptive.class);
+            StringBuilder code = new StringBuilder(512);
+            if (adaptiveAnnotation == null) {
+                code.append("throw new UnsupportedOperationException(\"method ")
+                        .append(method.toString()).append(" of interface ")
+                        .append(type.getName()).append(" is not adaptive method!\");");
+            } else {
+                int urlTypeIndex = -1;
+                for (int i = 0; i < pts.length; ++i) {
+                    if (pts[i].equals(URL.class)) {
+                        urlTypeIndex = i;
+                        break;
                     }
                 }
+                // found parameter in URL type
+                if (urlTypeIndex != -1) {
+                    // Null Point check
+                    String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"url == null\");",
+                            urlTypeIndex);
+                    code.append(s);
+
+                    s = String.format("\n%s url = arg%d;", URL.class.getName(), urlTypeIndex);
+                    code.append(s);
+                }
+                // did not find parameter in URL type
+                else {
+                    String attribMethod = null;
+
+                    // find URL getter method
+                    LBL_PTS:
+                    for (int i = 0; i < pts.length; ++i) {
+                        Method[] ms = pts[i].getMethods();
+                        for (Method m : ms) {
+                            String name = m.getName();
+                            if ((name.startsWith("get") || name.length() > 3)
+                                    && Modifier.isPublic(m.getModifiers())
+                                    && !Modifier.isStatic(m.getModifiers())
+                                    && m.getParameterTypes().length == 0
+                                    && m.getReturnType() == URL.class) {
+                                urlTypeIndex = i;
+                                attribMethod = name;
+                                break LBL_PTS;
+                            }
+                        }
+                    }
+                    if (attribMethod == null) {
+                        throw new IllegalStateException("fail to create adaptive class for interface " + type.getName()
+                                + ": not found url parameter or url attribute in parameters of method " + method.getName());
+                    }
+
+                    // Null point check
+                    String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"%s argument == null\");",
+                            urlTypeIndex, pts[urlTypeIndex].getName());
+                    code.append(s);
+                    s = String.format("\nif (arg%d.%s() == null) throw new IllegalArgumentException(\"%s argument %s() == null\");",
+                            urlTypeIndex, attribMethod, pts[urlTypeIndex].getName(), attribMethod);
+                    code.append(s);
+
+                    s = String.format("%s url = arg%d.%s();", URL.class.getName(), urlTypeIndex, attribMethod);
+                    code.append(s);
+                }
+
+                String[] value = adaptiveAnnotation.value();
+                // value is not set, use the value generated from class name as the key
+                if (value.length == 0) {
+                    char[] charArray = type.getSimpleName().toCharArray();
+                    StringBuilder sb = new StringBuilder(128);
+                    for (int i = 0; i < charArray.length; i++) {
+                        if (Character.isUpperCase(charArray[i])) {
+                            if (i != 0) {
+                                sb.append(".");
+                            }
+                            sb.append(Character.toLowerCase(charArray[i]));
+                        } else {
+                            sb.append(charArray[i]);
+                        }
+                    }
+                    value = new String[]{sb.toString()};
+                }
+
+                boolean hasInvocation = false;
+                for (int i = 0; i < pts.length; ++i) {
+                    if (pts[i].getName().equals("com.alibaba.dubbo.rpc.Invocation")) {
+                        // Null Point check
+                        String s = String.format("\nif (arg%d == null) throw new IllegalArgumentException(\"invocation == null\");", i);
+                        code.append(s);
+                        s = String.format("\nString methodName = arg%d.getMethodName();", i);
+                        code.append(s);
+                        hasInvocation = true;
+                        break;
+                    }
+                }
+
+                String defaultExtName = cachedDefaultName;
+                String getNameCode = null;
+                for (int i = value.length - 1; i >= 0; --i) {
+                    if (i == value.length - 1) {
+                        if (null != defaultExtName) {
+                            if (!"protocol".equals(value[i]))
+                                if (hasInvocation)
+                                    getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
+                                else
+                                    getNameCode = String.format("url.getParameter(\"%s\", \"%s\")", value[i], defaultExtName);
+                            else
+                                getNameCode = String.format("( url.getProtocol() == null ? \"%s\" : url.getProtocol() )", defaultExtName);
+                        } else {
+                            if (!"protocol".equals(value[i]))
+                                if (hasInvocation)
+                                    getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
+                                else
+                                    getNameCode = String.format("url.getParameter(\"%s\")", value[i]);
+                            else
+                                getNameCode = "url.getProtocol()";
+                        }
+                    } else {
+                        if (!"protocol".equals(value[i]))
+                            if (hasInvocation)
+                                getNameCode = String.format("url.getMethodParameter(methodName, \"%s\", \"%s\")", value[i], defaultExtName);
+                            else
+                                getNameCode = String.format("url.getParameter(\"%s\", %s)", value[i], getNameCode);
+                        else
+                            getNameCode = String.format("url.getProtocol() == null ? (%s) : url.getProtocol()", getNameCode);
+                    }
+                }
+                code.append("\nString extName = ").append(getNameCode).append(";");
+                // check extName == null?
+                String s = String.format("\nif(extName == null) " +
+                                "throw new IllegalStateException(\"Fail to get extension(%s) name from url(\" + url.toString() + \") use keys(%s)\");",
+                        type.getName(), Arrays.toString(value));
+                code.append(s);
+
+                s = String.format("\n%s extension = (%<s)%s.getExtensionLoader(%s.class).getExtension(extName);",
+                        type.getName(), ExtensionLoader.class.getSimpleName(), type.getName());
+                code.append(s);
+
+                // return statement
+                if (!rt.equals(void.class)) {
+                    code.append("\nreturn ");
+                }
+
+                s = String.format("extension.%s(", method.getName());
+                code.append(s);
+                for (int i = 0; i < pts.length; i++) {
+                    if (i != 0)
+                        code.append(", ");
+                    code.append("arg").append(i);
+                }
+                code.append(");");
             }
-        }
-    } catch (Exception e) {
-        logger.error(e.getMessage(), e);
-    }
-    return instance;
-}
-```
 
-根据对象名称和 Class 类型获取对象
-```Java
-private ExtensionLoader(Class<?> type) {
-    this.type = type;
-    objectFactory = (type == ExtensionFactory.class ? null : ExtensionLoader.getExtensionLoader(ExtensionFactory.class).getAdaptiveExtension());
-}
-```
-
-**ExtensionFactory** 实现类：
-
-![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027105458363-678830056.png)
-
-```Java
-@Adaptive
-public class AdaptiveExtensionFactory implements ExtensionFactory {
-
-    private final List<ExtensionFactory> factories; // @5
-
-    public AdaptiveExtensionFactory() {
-        ExtensionLoader<ExtensionFactory> loader = ExtensionLoader.getExtensionLoader(ExtensionFactory.class);
-        List<ExtensionFactory> list = new ArrayList<ExtensionFactory>();
-        for (String name : loader.getSupportedExtensions()) {  //@6
-            list.add(loader.getExtension(name));
-        }
-        factories = Collections.unmodifiableList(list);
-    }
-
-    @Override
-    public <T> T getExtension(Class<T> type, String name) {  // @7
-        for (ExtensionFactory factory : factories) {
-            T extension = factory.getExtension(type, name);
-            if (extension != null) {
-                return extension;
+            codeBuilder.append("\npublic ").append(rt.getCanonicalName()).append(" ").append(method.getName()).append("(");
+            for (int i = 0; i < pts.length; i++) {
+                if (i > 0) {
+                    codeBuilder.append(", ");
+                }
+                codeBuilder.append(pts[i].getCanonicalName());
+                codeBuilder.append(" ");
+                codeBuilder.append("arg").append(i);
             }
+            codeBuilder.append(")");
+            if (ets.length > 0) {
+                codeBuilder.append(" throws ");
+                for (int i = 0; i < ets.length; i++) {
+                    if (i > 0) {
+                        codeBuilder.append(", ");
+                    }
+                    codeBuilder.append(ets[i].getCanonicalName());
+                }
+            }
+            codeBuilder.append(" {");
+            codeBuilder.append(code.toString());
+            codeBuilder.append("\n}");
         }
-        return null;
+        codeBuilder.append("\n}");
+        if (logger.isDebugEnabled()) {
+            logger.debug(codeBuilder.toString());
+        }
+        return codeBuilder.toString();
     }
+```
 
+
+在 SimpleExt 接口的 echo 方法上加上 @Adaptive 注解再执行一次测试用例得到如下结果：
+
+```java
+Ext1Impl1-echo
+```
+
+```java
+public class SimpleExt$Adaptive implements com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt {
+    public java.lang.String bang(com.alibaba.dubbo.common.URL arg0, int arg1) {
+        throw new UnsupportedOperationException("method public abstract java.lang.String com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt.bang(com.alibaba.dubbo.common.URL,int) of interface com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt is not adaptive method!");
+    }
+    public java.lang.String yell(com.alibaba.dubbo.common.URL arg0, java.lang.String arg1) {throw new UnsupportedOperationException("method public abstract java.lang.String com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt.yell(com.alibaba.dubbo.common.URL,java.lang.String) of interface com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt is not adaptive method!");
+    }
+    public java.lang.String echo(com.alibaba.dubbo.common.URL arg0, java.lang.String arg1) {
+        if (arg0 == null) throw new IllegalArgumentException("url == null");
+        com.alibaba.dubbo.common.URL url = arg0;
+        String extName = url.getParameter("simple.ext", "impl1");
+        if(extName == null) throw new IllegalStateException("Fail to get extension(com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt) name from url(" + url.toString() + ") use keys([simple.ext])");
+        com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt extension = (com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt)ExtensionLoader.getExtensionLoader(com.alibaba.dubbo.common.extensionloader.ext1.SimpleExt.class).getExtension(extName);
+        return extension.echo(arg0, arg1);
+    }
 }
 ```
 
-```Java
-public Set<String> getSupportedExtensions() {
-    // 获取所有的 Class
-    Map<String, Class<?>> clazzes = getExtensionClasses();
-    return Collections.unmodifiableSet(new TreeSet<String>(clazzes.keySet()));
-}
-```
-
-在 @4 处，```objectFactory``` 变量的类型为 ```AdaptiveExtensionFactory```，AdaptiveExtensionFactory 内部维护了一个 ExtensionFactory 列表，用于 ExtensionFactory 所有的实现。Dubbo 目前提供了两种 ExtensionFactory，分别是 ```SpiExtensionFactory``` 和 ```SpringExtensionFactory```，前者用于创建自适应的拓展，后者是用于从 Spring 的 IOC 容器中获取所需的拓展。而 AdaptiveExtensionFactory 中的 ```factories``` 通过代码 @6 处持有所有的 ExtensionFactory 实现，变成一个列表。所以代码 @4 最终获取注入的属性对象最终就会走 @7 ，然后走 SpiExtensionFactory 和 SpringExtensionFactory 轮流获取，只要获取到就立即返回。
-
-Dubbo IOC 目前仅支持 setter 方式注入，总的来说，逻辑比较简单易懂。
-
-**以上 Dubbo SPI 源代码可以大致总结为下面的流程图**
-
-![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153711207-1212430025.png)
-
-## 总结
-
-本篇文章简单分别介绍了 Dubbo SPI 用法，并对 Dubbo SPI 的加载拓展类的过程进行了分析。另外，在 Dubbo SPI 中还有一块重要的逻辑这里没有进行分析，即 **Dubbo SPI 的扩展点自适应机制**。该机制的逻辑较为复杂，我们将会在下一篇文章中进行详细的分析。
+![](assets/markdown-img-paste-20201028162814383.png)

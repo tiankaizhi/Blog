@@ -1,9 +1,9 @@
 
 ## 前言
 
-在聊 Dubbo 的 SPI 之前，对 SPI 机制还不是很了解的小伙伴可以先简单了解一下 JDK 的 SPI 机制。
+在聊 Dubbo 的 SPI 之前，对 JDK 的 SPI 机制还不是很了解的小伙伴可以先简单了解一下。
 
-在 Dubbo 中，SPI 是一个非常重要的模块，贯穿整个 Dubbo 框架，以下模块的扩展都是基于 SPI 机制实现的。其实 SPI 用一句话概括就是在程序运行时，动态为接口根据条件生成对应的实现类。
+在 Dubbo 中，SPI 是一个非常重要的模块，贯穿整个 Dubbo 框架，以下模块的扩展都是基于 SPI 机制实现的。**Dubbo 的 SPI 机制的核心在于在程序运行过程中，根据条件动态为接口生成对应的扩展实现。**
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180143277-2109837406.png)
 
@@ -15,11 +15,11 @@
 2. Dubbo SPI 源码分析
 3. Dubbo SPI 大致流程图
 
-Dubbo 并未使用 Java SPI，而是重新实现了一套功能更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ExtensionLoader 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 META-INF/dubbo 路径下，配置内容如下。
-
-## Dubbo SPI 示例
+Dubbo 并未使用 JDK 原生 SPI，而是重新实现了一套更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ExtensionLoader 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 ```META-INF/dubbo``` 路径下，和 JDK 原生的区别在于它是 key-value 形式，配置内容如下
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180222454-1752089915.png)
+
+## Dubbo SPI 示例
 
 > 注意，下面的案例来源于 Dubbo 框架 dubbo-common 模块的改造，读者也可以参看 Dubbo 源代码部分
 
@@ -29,14 +29,12 @@ Dubbo 并未使用 Java SPI，而是重新实现了一套功能更强的 SPI 机
 ```Java
 @SPI
 public interface SimpleExt {
-    // @Adaptive example, do not specify a explicit key.
 
     String echo(URL url, String s);
 
 
     String yell(URL url, String s);
 
-    // no @Adaptive
     String bang(URL url, int i);
 }
 ```
@@ -98,8 +96,9 @@ public class SimpleExtImpl3 implements SimpleExt {
 ```Java
 @Test
 public void test_getExtension() throws Exception {
-    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl1").echo(new URL("","",9001),""));
-    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl2").echo(new URL("","",9001),""));
+    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl1").echo(new URL("","",0000),""));
+    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl2").echo(new URL("","",0000),""));
+    System.out.println(ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension("impl3").echo(new URL("","",0000),""));
 }
 ```
 
@@ -107,6 +106,7 @@ public void test_getExtension() throws Exception {
 ```
 Ext1Impl1-echo
 Ext1Impl2-echo
+Ext1Impl3-echo
 ```
 
 ## Dubbo SPI 源码分析
@@ -115,9 +115,11 @@ Ext1Impl2-echo
 
 > 注意，本文源码分析基于 dubbo 2.6.x 版本
 
-**Dubbo SPI 源代码目录：**
+**源码目录：**
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153637776-732718319.png)
+
+### ExtensionLoader&getExtension(String name)
 
 ```Java
 public T getExtension(String name) {
@@ -148,6 +150,8 @@ public T getExtension(String name) {
     return (T) instance;
 }
 ```
+
+### ExtensionLoader&createExtension(String name)
 
 ```Java
 private T createExtension(String name) {
@@ -194,7 +198,7 @@ private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<Map<Strin
 
 以上步骤中，第一个步骤是加载拓展类的关键，第三和第四个步骤是 Dubbo IOC 与 AOP 的具体实现。在接下来的章节中，将会重点分析 getExtensionClasses() 方法的逻辑，以及简单介绍 Dubbo IOC 的具体实现。
 
-### 获取所有的拓展类
+### ExtensionLoader&getExtensionClasses()
 
 我们在通过名称获取拓展类之前，首先需要根据配置文件解析出拓展项名称到拓展类的映射关系表（Map<名称, 拓展类>），之后再根据拓展项名称从映射关系表中取出相应的拓展类即可。相关过程的代码分析如下：
 
@@ -216,6 +220,8 @@ private Map<String, Class<?>> getExtensionClasses() {
     return classes;
 }
 ```
+
+### ExtensionLoader&loadExtensionClasses()
 
 这里也是先检查缓存，若缓存未命中，则通过 ```loadExtensionClasses()``` 加载拓展类。下面进行详细分析
 
@@ -257,11 +263,12 @@ private final Holder<Map<String, Class<?>>> cachedClasses = new Holder<Map<Strin
 ```
 中，其中 Map 的 key 是 配置文件中 key 部分，value 部分则是具体实现类的 Class 对象。
 
-@2 步根据 Class 对象创建了一个对象，并将其缓存到
+@2 步根据 Class 对象创建了一个对象，并将其缓存到 ```EXTENSION_INSTANCES``` 里面。
 ```Java
 private static final ConcurrentMap<Class<?>, Object> EXTENSION_INSTANCES = new ConcurrentHashMap<Class<?>, Object>();
 ```
-里面。
+
+### ExtensionLoader&injectExtension(T instance)
 
 @3 步就是 Dubbo 的自动注入部分，也就是 Dubbo 的 IOC 容器部分，注入上一步生成的 instance 实例所需的属性。
 
@@ -356,7 +363,9 @@ public Set<String> getSupportedExtensions() {
 
 Dubbo IOC 目前仅支持 setter 方式注入，总的来说，逻辑比较简单易懂。
 
-**以上 Dubbo SPI 源代码可以大致总结为下面的流程图**
+## Dubbo SPI 源码流程图
+
+以上 Dubbo SPI 源代码可以大致总结为下面的流程图
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153711207-1212430025.png)
 
