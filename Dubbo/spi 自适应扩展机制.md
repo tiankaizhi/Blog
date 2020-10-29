@@ -7,6 +7,14 @@
 @Adaptive 注解可以表示在类，接口，枚举和方法上，但是在整个Dubbo框架中，只有几个地方使用到了类级别上。其他都标注在方法上。如果标注在方法上，为方法级别注解，则可以通过参数动态获取实现类，这一点在自适应特性中已经说明。方法级别注解，在第一次getExtension时，会自动生成和编译一个动态的Adaptive类，从而达到动态实现类的效果。
 例如：Protocol接口在export和refer两个接口上添加了@Adaptive注解。Dubbo在初始化扩展点时，会生成Protocol$Adaptive类，里面会实现两个方法，方法里会有一些抽象的通用逻辑，通过@Adaptive中传入的参数，找到并调用真正的实现类。和装饰器模式比较类似。
 
+为什么有些实现类会标注 @Adaptive注解？
+
+1、放在实现类上，主要是为了直接固定对应的实现而不需要动态生成代码实现，就像策略模式直接确定实现类。
+2、在代码中的实现方式是：ExtensionLoader中会缓存两个与@Adaptive有关的对象，一个缓存在cachedAdaptiveClass中，即Adaptive具体的实现类的Class类型；
+3、另一个缓存在cachedAdaptiveInstance中，Class的具体实例化对象。
+4、在扩展点初始化时，如果发现实现类中有@Adaptive注解，则直接赋值给cachedAdaptiveClass，后续实例化类的时候，就不会在动态生成代码，直接实例化cachedAdaptiveClass，并把实力缓存到cachedAdaptiveInstance中。
+5、 如果注解在接口方法上，会根据参数，动态获得扩展点的实现，会生成Adaptive类，在缓存到cachedAdaptiveInstance中。
+
 ```java
 @SPI("impl1")
 public interface SimpleExt {
