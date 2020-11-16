@@ -1,19 +1,8 @@
-## 前言
+## 写在前面
 
-## 扩展点自适应 @Adaptive 注解与适配器
+在 Dubbo 中，很多拓展都是通过 SPI 机制进行加载的，比如 Protocol、Cluster、LoadBalance 等。有时，有些拓展并不想在框架启动阶段被加载，而是希望在拓展方法被调用时，根据运行时参数进行加载。这听起来有些矛盾。拓展未被加载，那么拓展方法就无法被调用（静态方法除外）。拓展方法未被调用，拓展就无法被加载。对于这个矛盾的问题，Dubbo 通过自适应拓展机制很好的解决了。自适应拓展机制的实现逻辑比较复杂，首先 Dubbo 会为拓展接口生成具有代理功能的代码。然后通过 javassist 或 jdk 编译这段代码，得到 Class 类。最后再通过反射创建代理类，整个过程比较复杂。为了让大家对自适应拓展有一个感性的认识，下面我们通过一个示例进行演示。这是一个与汽车相关的例子，我们有一个车轮制造厂接口 WheelMaker：
 
-@Adaptive 注解用来实现 Dubbo 的适配器功能，那什么是适配器呢？这里我们通过一个示例进行说明。Dubbo 中的 ExtensionFactory 接口有三个实现类，如下图所示，ExtensionFactory 接口上有 @SPI 注解，AdaptiveExtensionFactory 实现类上有 @Adaptive 注解。
-
-@Adaptive 注解可以表示在类，接口，枚举和方法上，但是在整个Dubbo框架中，只有几个地方使用到了类级别上。其他都标注在方法上。如果标注在方法上，为方法级别注解，则可以通过参数动态获取实现类，这一点在自适应特性中已经说明。方法级别注解，在第一次getExtension时，会自动生成和编译一个动态的Adaptive类，从而达到动态实现类的效果。
-例如：Protocol接口在export和refer两个接口上添加了@Adaptive注解。Dubbo在初始化扩展点时，会生成Protocol$Adaptive类，里面会实现两个方法，方法里会有一些抽象的通用逻辑，通过@Adaptive中传入的参数，找到并调用真正的实现类。和装饰器模式比较类似。
-
-为什么有些实现类会标注 @Adaptive注解？
-
-1、放在实现类上，主要是为了直接固定对应的实现而不需要动态生成代码实现，就像策略模式直接确定实现类。
-2、在代码中的实现方式是：ExtensionLoader中会缓存两个与@Adaptive有关的对象，一个缓存在cachedAdaptiveClass中，即Adaptive具体的实现类的Class类型；
-3、另一个缓存在cachedAdaptiveInstance中，Class的具体实例化对象。
-4、在扩展点初始化时，如果发现实现类中有@Adaptive注解，则直接赋值给cachedAdaptiveClass，后续实例化类的时候，就不会在动态生成代码，直接实例化cachedAdaptiveClass，并把实力缓存到cachedAdaptiveInstance中。
-5、 如果注解在接口方法上，会根据参数，动态获得扩展点的实现，会生成Adaptive类，在缓存到cachedAdaptiveInstance中。
+## 先来看一组测试用例：
 
 ```java
 @SPI("impl1")
@@ -48,16 +37,14 @@ public class SimpleExtImpl3 implements SimpleExt {
 
 ```java
 @Test
-public void test_getAdaptiveExtension_defaultAdaptiveKey() throws Exception {
-    {
-        SimpleExt ext = ExtensionLoader.getExtensionLoader(SimpleExt.class).getAdaptiveExtension();
+public void test_getAdaptiveExtension_defaultAdaptiveKey() throws Exception {    
+    SimpleExt ext = ExtensionLoader.getExtensionLoader(SimpleExt.class).getAdaptiveExtension();
 
-        Map<String, String> map = new HashMap<String, String>();
-        URL url = new URL("p1", "1.2.3.4", 1010, "path1", map);
+    Map<String, String> map = new HashMap<String, String>();
+    URL url = new URL("p1", "1.2.3.4", 1010, "path1", map);
 
-        String echo = ext.echo(url, "haha");
-        System.out.println(echo);
-    }
+    String echo = ext.echo(url, "haha");
+    System.out.println(echo);
 }
 ```
 
@@ -100,7 +87,112 @@ Caused by: java.lang.IllegalStateException: No adaptive method on extension com.
 	at com.alibaba.dubbo.common.extension.ExtensionLoader.getAdaptiveExtensionClass(ExtensionLoader.java:734)
 	at com.alibaba.dubbo.common.extension.ExtensionLoader.createAdaptiveExtension(ExtensionLoader.java:723)
 	... 24 more
+
+Disconnected from the target VM, address: '127.0.0.1:5160', transport: 'socket'
+
+Process finished with exit code -1
+
 ```
+
+在 SimpleExt 接口的 echo 方法上加上 @Adaptive 注解，即：
+
+```java
+@SPI("impl1")
+public interface SimpleExt {
+    @Adaptive
+    String echo(URL url, String s);
+}
+```
+
+再执行一次测试用例得到如下结果：
+
+```java
+Ext1Impl1-echo
+```
+
+再对 SimpleExt 接口的 echo 方法上的 @Adaptive 注解添加一些条件参数
+
+```java
+@SPI("impl1")
+public interface SimpleExt {
+    @Adaptive({"key2"})
+    String echo(URL url, String s);
+}
+```
+
+测试用例为：
+
+```java
+@Test
+public void test_getAdaptiveExtension_defaultAdaptiveKey() throws Exception {
+    SimpleExt ext = ExtensionLoader.getExtensionLoader(SimpleExt.class).getAdaptiveExtension();
+
+    Map<String, String> map = new HashMap<String, String>();
+    map.put("key2","impl2");
+    URL url = new URL("p1", "1.2.3.4", 1010, "path1", map);
+
+    String echo = ext.echo(url, "haha");
+    System.out.println(echo);
+}
+```
+
+运行结果为：
+```java
+Ext1Impl2-echo
+```
+
+多个参数形式：
+
+```java
+@SPI("impl1")
+public interface SimpleExt {
+    @Adaptive({"key2","key3"})
+    String echo(URL url, String s);
+}
+```
+
+测试用例为：
+
+```java
+@Test
+public void test_getAdaptiveExtension_defaultAdaptiveKey() throws Exception {
+    SimpleExt ext = ExtensionLoader.getExtensionLoader(SimpleExt.class).getAdaptiveExtension();
+
+    Map<String, String> map = new HashMap<String, String>();
+    map.put("key2","impl2");
+    map.put("key3","impl3");
+    URL url = new URL("p1", "1.2.3.4", 1010, "path1", map);
+
+    String echo = ext.echo(url, "haha");
+    System.out.println(echo);
+}
+```
+
+运行结果为：
+```java
+Ext1Impl2-echo
+```
+
+多个同时存在的时候，只会选择一个，那么具体选择哪个，和你传入的参数的前后顺序无关，和你的注解里面的多个 key 的前后顺序相关，比如将 ```@Adaptive({"key2", "key3"})``` 改成 ```@Adaptive({"key3", "key2"})``` 结果就是 ```Ext1Impl3-echo```
+
+![](assets/markdown-img-paste-20201116180321864.png)
+
+
+## 扩展点自适应 @Adaptive 注解与适配器
+
+@Adaptive 注解用来实现 Dubbo 的适配器功能，那什么是适配器呢？这里我们通过一个示例进行说明。Dubbo 中的 ExtensionFactory 接口有三个实现类，如下图所示，ExtensionFactory 接口上有 @SPI 注解，AdaptiveExtensionFactory 实现类上有 @Adaptive 注解。
+
+@Adaptive 注解可以表示在类，接口，枚举和方法上，但是在整个 Dubbo 框架中，只有几个地方使用到了类级别上。其他都标注在方法上。如果标注在方法上，为方法级别注解，则可以通过参数动态获取实现类，这一点在自适应特性中已经说明。方法级别注解，在第一次 getExtension 时，会自动生成和编译一个动态的 Adaptive 类，从而达到动态实现类的效果。
+
+例如：Protocol 接口在 export 和 refer 两个接口上添加了 @Adaptive 注解。Dubbo在 初始化扩展点时，会生成 Protocol$Adaptive 类，里面会实现两个方法，方法里会有一些抽象的通用逻辑，通过 @Adaptive 中传入的参数，找到并调用真正的实现类。和装饰器模式比较类似。
+
+为什么有些实现类会标注 @Adaptive注解？
+
+1、放在实现类上，主要是为了直接固定对应的实现而不需要动态生成代码实现，就像策略模式直接确定实现类。
+2、在代码中的实现方式是：ExtensionLoader中会缓存两个与@Adaptive有关的对象，一个缓存在cachedAdaptiveClass中，即Adaptive具体的实现类的Class类型；
+3、另一个缓存在cachedAdaptiveInstance中，Class的具体实例化对象。
+4、在扩展点初始化时，如果发现实现类中有@Adaptive注解，则直接赋值给cachedAdaptiveClass，后续实例化类的时候，就不会在动态生成代码，直接实例化cachedAdaptiveClass，并把实力缓存到cachedAdaptiveInstance中。
+5、 如果注解在接口方法上，会根据参数，动态获得扩展点的实现，会生成Adaptive类，在缓存到cachedAdaptiveInstance中。
 
 getAdaptiveExtension() 作为入口 --> createAdaptiveExtension() --> getAdaptiveExtensionClass() -- > createAdaptiveExtensionClassCode()
 
@@ -316,13 +408,6 @@ private String createAdaptiveExtensionClassCode() {
         }
         return codeBuilder.toString();
     }
-```
-
-
-在 SimpleExt 接口的 echo 方法上加上 @Adaptive 注解再执行一次测试用例得到如下结果：
-
-```java
-Ext1Impl1-echo
 ```
 
 ```java
