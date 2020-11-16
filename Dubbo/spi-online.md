@@ -365,4 +365,10 @@ Dubbo IOC 目前仅支持 setter 方式注入，总的来说，逻辑比较简�
 
 ## 总结
 
-本篇文章简单介绍了 Dubbo SPI 的使用 API，并对 Dubbo SPI 的加载拓展类的过程进行了分析。另外，在 Dubbo SPI 中还有一块重要的逻辑这里没有进行分析，即 **Dubbo SPI 的扩展点自适应机制**。该机制的逻辑较为复杂，会在下一篇文章中进行详细的分析。
+本篇文章主要对 Dubbo SPI 的 API 的使用和 SPI 加载扩展类的过程进行了简单分析。Dubbo SPI 机制另外一块非常重要的 ```扩展点自适应机制``` 将在下篇文章详细分析。
+
+**参考**
+
++ http://dubbo.apache.org/zh-cn/docs/2.7/source_code_guide/dubbo-spi/
+
++ http://dubbo.apache.org/zh-cn/docs/2.7/dev/SPI/
