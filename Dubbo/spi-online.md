@@ -1,27 +1,21 @@
 
-## 前言
+## 写在前面
 
 在聊 Dubbo 的 SPI 之前，对 JDK 的 SPI 机制还不是很了解的小伙伴可以先简单了解一下。
 
-在 Dubbo 中，SPI 是一个非常重要的模块，贯穿整个 Dubbo 框架，以下模块的扩展都是基于 SPI 机制实现的。**Dubbo 的 SPI 机制的核心在于在程序运行过程中，根据条件动态为接口生成对应的扩展实现。**
+在 Dubbo 中，SPI 是一个非常重要的模块，贯穿整个 Dubbo 框架，以下模块的扩展都是基于 SPI 机制实现的。**Dubbo 的 SPI 机制的核心是在程序运行过程中，```根据传入的条件，动态的为接口生成对应的扩展实现```。**
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180143277-2109837406.png)
 
-## 文章脉络
+## Dubbo 的 SPI 机制
 
-本篇文章按照先后顺序包含以下几个模块：
-
-1. Dubbo SPI 使用案例
-2. Dubbo SPI 源码分析
-3. Dubbo SPI 大致流程图
-
-Dubbo 并未使用 JDK 原生 SPI，而是重新实现了一套更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ExtensionLoader 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 ```META-INF/dubbo``` 路径下，和 JDK 原生的区别在于它是 key-value 形式，配置内容如下
+Dubbo 并未使用 JDK 原生 SPI，而是重新实现了一套更强的 SPI 机制。Dubbo SPI 的相关逻辑被封装在了 ```ExtensionLoader``` 类中，通过 ExtensionLoader，我们可以加载指定的实现类。Dubbo SPI 所需的配置文件需放置在 ```META-INF/dubbo``` 路径下，和 JDK 原生的区别在于它是 ```key-value``` 形式，配置内容如下图：
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201026180222454-1752089915.png)
 
 ## Dubbo SPI 示例
 
-> 注意，下面的案例来源于 Dubbo 框架 dubbo-common 模块的改造，读者也可以参看 Dubbo 源代码部分
+下面的测试用例来源于 Dubbo 框架 dubbo-common 模块源码的改造，小伙伴们调试的时候可以直接在 Dubbo 源测试用例基础上进行扩展
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153602839-2102413431.png)
 
@@ -29,9 +23,7 @@ Dubbo 并未使用 JDK 原生 SPI，而是重新实现了一套更强的 SPI 机
 ```Java
 @SPI
 public interface SimpleExt {
-
     String echo(URL url, String s);
-
 
     String yell(URL url, String s);
 
@@ -109,17 +101,19 @@ Ext1Impl2-echo
 Ext1Impl3-echo
 ```
 
+Dubbo 的 SPI 机制是通过 ```ExtensionLoader.getExtensionLoader(SimpleExt.class).getExtension(key)``` 传入对应的扩展类的对应的 key 获取相对应的扩展类对象，然后调用其方法。下面，我们对其核心源码进行简单分析，看看 Dubbo 是如何实现它自己的 SPI 机制的。  
+
 ## Dubbo SPI 源码分析
 
-接下来对 Dubbo SPI 机制进行源码分析，在源码分析的过程中会对提到 **Dubbo 相对于 JDK SPI 方式的优点在哪里**，希望能加深小伙伴们对两种 SPI 方式的理解
+接下来对 Dubbo SPI 机制进行源码分析，在源码分析的过程小伙伴们要重点关注 **Dubbo 的 SPI 机制相对于 JDK 的有哪些优点**，通过对比，希望能加深对两种 SPI 方式的理解
 
-> 注意，本文源码分析基于 dubbo 2.6.x 版本
+> 注意，文章源码基于 dubbo 2.6.x
 
 **源码目录：**
 
 ![](https://img2020.cnblogs.com/blog/1326851/202010/1326851-20201027153637776-732718319.png)
 
-### ExtensionLoader&getExtension(String name)
+### 入口 ExtensionLoader&getExtension(String name)
 
 ```Java
 public T getExtension(String name) {
@@ -371,4 +365,4 @@ Dubbo IOC 目前仅支持 setter 方式注入，总的来说，逻辑比较简�
 
 ## 总结
 
-本篇文章简单分别介绍了 Dubbo SPI 用法，并对 Dubbo SPI 的加载拓展类的过程进行了分析。另外，在 Dubbo SPI 中还有一块重要的逻辑这里没有进行分析，即 **Dubbo SPI 的扩展点自适应机制**。该机制的逻辑较为复杂，我们将会在下一篇文章中进行详细的分析。
+本篇文章简单介绍了 Dubbo SPI 的使用 API，并对 Dubbo SPI 的加载拓展类的过程进行了分析。另外，在 Dubbo SPI 中还有一块重要的逻辑这里没有进行分析，即 **Dubbo SPI 的扩展点自适应机制**。该机制的逻辑较为复杂，会在下一篇文章中进行详细的分析。
